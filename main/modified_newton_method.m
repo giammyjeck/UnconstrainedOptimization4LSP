@@ -81,7 +81,7 @@ while k < kmax && gradfk_norm >= tolgrad
     tauk(1)= tau_k;
 
     for j = 1:maxit
-            Bk = Hk+tauk(j)*eye(size(Hk)); % dovremmo controllare che Bk sia simmetrica prima di usare chol? 
+            Bk = Hk+tauk(j)*speye(size(Hk)); % dovremmo controllare che Bk sia simmetrica prima di usare chol? 
            
             [R,flag] = chol(Bk);
             % Chech if the correction is good enough (Is Bk positive definite?)
