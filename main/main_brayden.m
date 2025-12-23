@@ -38,7 +38,7 @@ for n = dim
         x0 = X0(:, j);
         
         tic;
-        [xk, fk, gradfk_norm, k, xseq, btseq] = modified_newton_method(...
+        [xk,fk,gradfk_norm,k,xseq,btseq,tau_new,alphas,pks] = modified_newton_method(...
             x0, f, grad, hess, kmax, tolgrad, c1, rho, btmax, beta);
         time = toc;
         

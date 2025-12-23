@@ -1,39 +1,49 @@
-function [xk,fk,gradfk_norm,k,xseq,btseq,tau_new,alphas,pks] = modified_newton_method2(x0,f,gradf,hessf,kmax,tolgrad,c1,rho,btmax,beta)
+function [xk,fk,gradfk_norm,k,xseq,btseq,tau_new,alphas,pks] = ...
+    modified_newton_method2(x0,f,gradf,hessf,kmax,tolgrad,c1,rho,btmax,beta)
 
+% Armijo condition
 farmijo = @(fk, alpha, c1_gradfk_pk) fk + alpha * c1_gradfk_pk;
 
-tol = 1e-6;
-maxit = 100;
+% max number of attempts for tau correction
+maxtau = 100;
 
-xseq = zeros(length(x0), kmax);
-btseq = zeros(1, kmax);
+% Allocations
+n = length(x0);
+xseq   = zeros(n, kmax);
+btseq  = zeros(1, kmax);
 alphas = zeros(1, kmax);
-pks = zeros(length(x0), kmax);
-tau_new = zeros(maxit+1, kmax);
+pks    = zeros(n, kmax);
+tau_new = zeros(maxtau+1, kmax);
 
+% Initialization
 xk = x0;
 fk = f(xk);
 gradfk = gradf(xk);
 gradfk_norm = norm(gradfk);
 k = 0;
 
+% Main loop
 while k < kmax && gradfk_norm >= tolgrad
 
-    % Hessiana e correzione
+    % Hessian at current point
     Hk = hessf(xk);
-    diagHk = diag(Hk);
-    isPositive = all(diagHk > tol);
 
-    tau_k = 0;
-    if ~isPositive
-        tau_k = beta - min(diagHk);
+    % Try Cholesky on the original Hessian
+    [R,flag] = chol(Hk);
+
+    % Initial tau
+    if flag == 0
+        tau_k = 0;          % Hessian already SPD
+    else
+        tau_k = beta;      % start correction
     end
 
-    tauk = zeros(maxit+1,1);
+    tauk = zeros(maxtau+1,1);
     tauk(1) = tau_k;
 
-    for j = 1:maxit
-        Bk = Hk + tauk(j)*eye(size(Hk));
+    % Modified Hessian until SPD
+    for j = 1:maxtau
+        Bk = Hk + tauk(j)*eye(n);
         [R,flag] = chol(Bk);
         if flag == 0
             break
@@ -42,16 +52,16 @@ while k < kmax && gradfk_norm >= tolgrad
         end
     end
 
-    % Direzione di Newton modificata
-    pk = R\(R'\(-gradfk));
+    % Modified Newton direction
+    pk = R \ (R' \ (-gradfk));
 
-    % Backtracking
+    % Backtracking line search (Armijo)
     alpha = 1;
-    xnew = xk + alpha * pk;
-    fnew = f(xnew);
-
     c1_gradfk_pk = c1 * gradfk' * pk;
     bt = 0;
+
+    xnew = xk + alpha * pk;
+    fnew = f(xnew);
 
     while bt < btmax && fnew > farmijo(fk, alpha, c1_gradfk_pk)
         alpha = rho * alpha;
@@ -60,34 +70,35 @@ while k < kmax && gradfk_norm >= tolgrad
         bt = bt + 1;
     end
 
+    % Safeguard
     if bt == btmax && fnew > farmijo(fk, alpha, c1_gradfk_pk)
-        disp("Backtracking: massimo raggiunto");
+        disp("Backtracking: massimo numero di iterazioni raggiunto");
         break;
     end
 
-    % Aggiornamento
+    % Update
     k = k + 1;
     xk = xnew;
     fk = fnew;
     gradfk = gradf(xk);
     gradfk_norm = norm(gradfk);
 
-    % Salvataggi
-    xseq(:, k)   = xk;
-    btseq(k)     = bt;
-    alphas(k)    = alpha;
-    pks(:, k)    = pk;
-    tau_new(:,k) = tauk;
+    % Store results
+    xseq(:,k)   = xk;
+    btseq(k)    = bt;
+    alphas(k)   = alpha;
+    pks(:,k)    = pk;
+    tau_new(1:length(tauk),k) = tauk;
 
 end
 
-% Taglio matrici
-xseq   = xseq(:, 1:k);
+% Trim outputs
+xseq   = xseq(:,1:k);
 btseq  = btseq(1:k);
 alphas = alphas(1:k);
-pks    = pks(:, 1:k);
+pks    = pks(:,1:k);
 
-% Inserisco x0 come primo punto per l'animazione
+% Add x0 as first point (useful for plots)
 xseq = [x0, xseq];
 
 end
