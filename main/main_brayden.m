@@ -1,4 +1,6 @@
-%% PROBLEM 5
+% ============================================================
+% Problem 5: Generalized Broyden Tridiagonal Function
+% ============================================================
 
 clear; clc; close all;
 
@@ -7,7 +9,6 @@ clear; clc; close all;
 student_id = 346710; % Francesca's ID
 rng(student_id);
 
-dim = [2, 1e3, 1e4, 1e5];
 p = 7/3; 
 
 kmax = 1000; % Maximum number of iterations
@@ -17,8 +18,32 @@ rho = 0.5;   % Reduction parameter for backtracking
 btmax = 20;  % Maximum number for halving alpha
 beta = 1e-3; % Correction parameter for the Hessian
 
-% 2.
+
+%% SINGLE EXPERIMENT RUN
+dim = 2;
+[f, grad, hess] = get_broyden_functions(p);
+xStarting = -ones(dim,1);
+
+fprintf('\n--- Starting point: xStarting ---\n');
+try
+    tic;
+    [xk,fk,gradfk_norm,k] = modified_newton_method( ...
+        xStarting,f,grad,hess,kmax,tolgrad,c1,rho,btmax,beta);
+    time = toc;
+    
+    fprintf('Iters: %d, Final f: %.2e, GradNorm: %.2e, Time: %.4fs\n', ...
+         k, fk, gradfk_norm, time);
+
+catch ME
+    fprintf('FAILED (likely memory limit)\n');
+    disp(ME.message);
+end
+
+
+%% 2. FULL EXPERIMENT RUN for actual configuration 
 disp('***   PROBLEM NUMBER 5   ***');
+dim = [2, 1e3, 1e4, 1e5];
+experimentalMAtrix
 for n = dim
 
     fprintf('\n--- Dimension n = %d ---\n', n);

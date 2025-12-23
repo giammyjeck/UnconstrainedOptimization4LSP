@@ -1,163 +1,278 @@
-clear; clc; close all;
+clc
+close all
+clear
 
-%% ============================================================
-%  TEST 1 — QUADRATICA CON MINIMO NOTO
-%  f(x) = (1/2)*x'Ax - b'x,  A definita positiva
-%  Minimo noto: x* = A\b
-% ============================================================
+addpath(genpath('functions'));
+addpath(genpath('test'));
+load test_functions2.mat
 
-disp("TEST 1: Quadratica con minimo noto (A PD)");
-
-A = [4 1; 1 3];
-b = [-1; 2];
-
-f = @(x) 0.5*x'*A*x - b'*x;
-gradf = @(x) A*x - b;
-hessf = @(x) A;
-
-x0 = [10; -5];
-
-[xk,fk,grad_norm,k,~,~,tauk] = modified_newton_method2( ...
-    x0,f,gradf,hessf,200,1e-8,1e-4,0.5,20,1e-3);
-% function [xk,fk,gradfk_norm,k,xseq,btseq] = 
-% modified_newton_method(x0,f,gradf,hessf,kmax,tolgrad,c1,rho,btmax,beta)
-
-disp("Soluzione attesa:");
-x_star = A\b
-
-disp("Soluzione ottenuta:");
-xk
-
-disp("Errore norm(xk - x*) = ");
-norm(xk - x_star)
-
-disp("Numero iterazioni k");
-k
-
-disp(" Matrice correzioni per rendere Bk def.pos.");
-sum(tauk,"all")
-
-%% ============================================================
-%  TEST 2 — ROSENBROCK 2D
-%  Minimo noto: (1,1)
-%  Hessiana non PD ovunque → test correzione τ
-% ============================================================
-
-disp("TEST 2: Rosenbrock (Hessiana non PD in molti punti)");
-
-f = @(x) 100*(x(2)-x(1)^2)^2 + (1-x(1))^2;
-gradf = @(x) [ -400*x(1)*(x(2)-x(1)^2) - 2*(1-x(1));
-               200*(x(2)-x(1)^2) ];
-hessf = @(x) [ 1200*x(1)^2-400*x(2)+2  ,  -400*x(1);
-               -400*x(1)               ,  200       ];
-
-x0 = [-1.2; 1];
-
-[xk,fk,grad_norm,k,~,~,tauk] = modified_newton_method( ...
-    x0,f,gradf,hessf,2000,1e-7,1e-4,0.5,25,1e-3);
-
-disp("Minimo vero: [1; 1]");
-xk
-norm(xk - [1;1])
+%% Il codice è strutturato come segue:
+% Prima definiamo alcuni parametri comuni alle due funzioni
+% Poi un elenco di funzioni su cui è stato testato il corretto
+% comportamento dei metodi, le funzioni dei test sono:
+% 1- caso banale funzione quadratica
+% 2- caso hessiana indefinita, non ho convergenza
+% 3- caso f1 di test_functions2
+% 4- caso f2 di ""
+% 5- caso f3 di ""
+%
+% Alla fine un codice che permette di stampare il caso N=2 per dei plot
 
 
-disp("Numero iterazioni k");
-k
 
-disp(" Matrice correzioni per rendere Bk def.pos.");
-sum(tauk,"all")
+%% Parameter
+% Common Parameter for MODIFIED
 
-%% ============================================================
-%  TEST 3 — HESSIANA INDEFINITA CHE DEVE ROMPERE LA CHOLESKY
-%  f(x) = x1^2 - x2^2  → Hessiana = diag(2, -2) → NON PD
-%  Verifica che τ venga aggiornato finché Bk è PD
-% ============================================================
+tolgrad = 1e-8;
+c1 = 0.1;
+rho = 0.5;
+btmax = 20;
+beta = 1e-3;
+kmax = 100;
 
-disp("TEST 3: Hessiana indefinita che rompe Cholesky (correzione τ obbligatoria)");
+% common parameter for TRUNCATED
 
-f = @(x) x(1)^2 - x(2)^2;
-gradf = @(x) [2*x(1); -2*x(2)];
-hessf = @(x) [2 0; 0 -2];  % Sempre indefinita
+%% Convergenza su funzione quadratica
+disp('Convergenza su funzione quadratica');
+H = [2 0; 0 2];
+f_quad = @(x) 0.5*x'*H*x;
+grad_quad = @(x) H*x;
+hess_quad = @(x) H;
 
-x0 = [1; 1];
+% Metodo 1
+[xk1,fk1,gradfk_norm1,k1,xseq1,btseq1,tau_new1,alphas1,pks1] = ...
+    modified_newton_method([1;1], f_quad, grad_quad, hess_quad, kmax, tolgrad, c1, rho, btmax, beta);
 
-[xk,fk,grad_norm,k,~,~,tauk] = modified_newton_method( ...
-    x0,f,gradf,hessf,50,1e-8,1e-4,0.5,20,1e-3);
+% Metodo 2
+[xk2,fk2,gradfk_norm2,k2,xseq2,btseq2,tau_new2,alphas2,pks2] = ...
+    modified_newton_method2([1;1], f_quad, grad_quad, hess_quad, kmax, tolgrad, c1, rho, btmax, beta);
 
-disp("Risultato ottenuto (non ci si aspetta convergenza a un minimo, solo stabilità):");
-xk
-fk
-grad_norm
-
-disp("Numero iterazioni k");
-k
-
-disp(" Matrice correzioni per rendere Bk def.pos.");
-sum(tauk,"all")
-
-%% ============================================================
-%  TEST 4 — CASO PATOLOGICO: FUNZIONE NON DIFFERENZIABILE
-%  f(x) = ||x|| → gradf mal definito in 0
-%  Verifica robustezza (ci si aspetta rottura, ma non crash)
-% ============================================================
-
-disp("TEST 4: Funzione non differenziabile (patologica)");
-
-f = @(x) norm(x);
-gradf = @(x) x / norm(x);    % definizione che esplode in zero
-hessf = @(x) eye(length(x)); % fittizia
-
-x0 = [1e-12; -1e-12];   % vicino alla non differenziabilità
-
-try
-    [xk,fk,grad_norm,k] = modified_newton_method( ...
-        x0,f,gradf,hessf,50,1e-6,1e-4,0.5,20,1);
-    disp("Output ottenuto:");
-    xk
-catch ME
-    disp("Errore catturato (corretto per funzione non regolare):");
-    disp(ME.message);
+% Assert Metodo 1
+assert(norm(xk1) < 1e-10, 'Test 1 fallito: minimo non raggiunto (method1)');
+assert(k1 == 1, 'Test 1 fallito: Newton non converge in una iterazione (method1)');
+assert(all(tau_new1(:) >= 0), 'Test 2 fallito: tau negativo trovato (method1)');
+for i = 1:k1
+    f_curr = f_quad(xseq1(:,i));
+    f_next = f_quad(xseq1(:,i+1));
+    grad_curr = grad_quad(xseq1(:,i));
+    p_curr = pks1(:,i);
+    alpha_curr = alphas1(i);
+    armijo = f_curr + c1*alpha_curr*(grad_curr'*p_curr);
+    assert(f_next <= armijo + 1e-12, 'Test 3 fallito: Armijo non soddisfatta (method1)');
 end
+assert(size(xseq1,2) == k1+1, 'Test 4 fallito: xseq dimensione errata (method1)');
+assert(length(btseq1) == k1, 'Test 4 fallito: btseq dimensione errata (method1)');
+assert(length(alphas1) == k1, 'Test 4 fallito: alphas dimensione errata (method1)');
+assert(size(pks1,2) == k1, 'Test 4 fallito: pks dimensione errata (method1)');
 
+% Assert Metodo 2
+assert(norm(xk2) < 1e-10, 'Test 1 fallito: minimo non raggiunto (method2)');
+assert(k2 == 1, 'Test 1 fallito: Newton non converge in una iterazione (method2)');
+assert(all(tau_new2(:) >= 0), 'Test 2 fallito: tau negativo trovato (method2)');
+for i = 1:k2
+    f_curr = f_quad(xseq2(:,i));
+    f_next = f_quad(xseq2(:,i+1));
+    grad_curr = grad_quad(xseq2(:,i));
+    p_curr = pks2(:,i);
+    alpha_curr = alphas2(i);
+    armijo = f_curr + c1*alpha_curr*(grad_curr'*p_curr);
+    assert(f_next <= armijo + 1e-12, 'Test 3 fallito: Armijo non soddisfatta (method2)');
+end
+assert(size(xseq2,2) == k2+1, 'Test 4 fallito: xseq dimensione errata (method2)');
+assert(length(btseq2) == k2, 'Test 4 fallito: btseq dimensione errata (method2)');
+assert(length(alphas2) == k2, 'Test 4 fallito: alphas dimensione errata (method2)');
+assert(size(pks2,2) == k2, 'Test 4 fallito: pks dimensione errata (method2)');
 
-%% ============================================================
-%  TEST 5 — ARMIJO CHE NON SI SODDISFA MAI
-%  f(x)=exp(100x1)+x2^2 → gradiente enorme → backtracking spinto
-% ============================================================
+disp(['Metodo 1: xk = ', mat2str(xk1), ', fk = ', num2str(fk1)]);
+disp(['Metodo 2: xk = ', mat2str(xk2), ', fk = ', num2str(fk2)]);
+disp('Convergenza su funzione quadratica: DONE');
 
-disp("TEST 5: Armijo che fallisce spesso (backtracking estremo)");
+%% Caso funzione con Hessiano non positivo definito iniziale
+disp('Funzione mock con Hessiano non positivo definito iniziale');
+f_mock = @(x) x(1)^2 - x(2)^2 + x(1)*x(2);
+grad_mock = @(x) [2*x(1)+x(2); -2*x(2)+x(1)];
+hess_mock = @(x) [2 1; 1 -2];
 
-f = @(x) exp(100*x(1)) + x(2)^2;
-gradf = @(x) [100*exp(100*x(1)); 2*x(2)];
-hessf = @(x) [10000*exp(100*x(1)), 0; 0, 2];
+[xk1,fk1,gradfk_norm1,k1,xseq1,btseq1,tau_new1,alphas1,pks1]= ...
+    modified_newton_method([1;1], f_mock, grad_mock, hess_mock, kmax, tolgrad, c1, rho, btmax, beta);
 
-x0 = [-0.1; 10]; % grad enormi → Armijo dura molto
+[xk2,fk2,gradfk_norm2,k2,xseq2,btseq2,tau_new2,alphas2,pks2]= ...
+    modified_newton_method2([1;1], f_mock, grad_mock, hess_mock, kmax, tolgrad, c1, rho, btmax, beta);
 
-[xk,fk,grad_norm,k,~,btseq] = modified_newton_method( ...
-    x0,f,gradf,hessf,80,1e-6,1e-4,0.2,20,1e-3);
+% Assert Metodo 1
+assert(norm(gradfk_norm1) < tolgrad, 'Test fallito: gradiente finale troppo grande (method1)');
+assert(all(tau_new1(:) >= 0), 'Test fallito: tau negativo trovato (method1)');
+for i = 1:k1
+    f_curr = f_mock(xseq1(:,i));
+    f_next = f_mock(xseq1(:,i+1));
+    grad_curr = grad_mock(xseq1(:,i));
+    p_curr = pks1(:,i);
+    alpha_curr = alphas1(i);
+    armijo = f_curr + c1*alpha_curr*(grad_curr'*p_curr);
+    assert(f_next <= armijo + 1e-12, 'Test fallito: Armijo non soddisfatta (method1)');
+end
+assert(size(xseq1,2) == k1+1, 'Test fallito: xseq dimensione errata (method1)');
+assert(length(btseq1) == k1, 'Test fallito: btseq dimensione errata (method1)');
+assert(length(alphas1) == k1, 'Test fallito: alphas dimensione errata (method1)');
+assert(size(pks1,2) == k1, 'Test fallito: pks dimensione errata (method1)');
 
-disp("Numero max di backtracking raggiunto in qualche iterazione?");
-max(btseq)
+% Assert Metodo 2
+assert(norm(gradfk_norm2) < tolgrad, 'Test fallito: gradiente finale troppo grande (method2)');
+assert(all(tau_new2(:) >= 0), 'Test fallito: tau negativo trovato (method2)');
+for i = 1:k2
+    f_curr = f_mock(xseq2(:,i));
+    f_next = f_mock(xseq2(:,i+1));
+    grad_curr = grad_mock(xseq2(:,i));
+    p_curr = pks2(:,i);
+    alpha_curr = alphas2(i);
+    armijo = f_curr + c1*alpha_curr*(grad_curr'*p_curr);
+    assert(f_next <= armijo + 1e-12, 'Test fallito: Armijo non soddisfatta (method2)');
+end
+assert(size(xseq2,2) == k2+1, 'Test fallito: xseq dimensione errata (method2)');
+assert(length(btseq2) == k2, 'Test fallito: btseq dimensione errata (method2)');
+assert(length(alphas2) == k2, 'Test fallito: alphas dimensione errata (method2)');
+assert(size(pks2,2) == k2, 'Test fallito: pks dimensione errata (method2)');
 
+disp(['Metodo 1: xk = ', mat2str(xk1), ', fk = ', num2str(fk1)]);
+disp(['Metodo 2: xk = ', mat2str(xk2), ', fk = ', num2str(fk2)]);
+disp('Convergenza funzione con Hessiano non positivo definito iniziale: DONE');
 
-disp("Numero iterazioni k");
-k
+%% Section f1
+disp('Test funzione f1');
+[xk1,fk1,gradfk_norm1,k1,xseq1,btseq1,tau_new1,alphas1,pks1] = ...
+    modified_newton_method([1;1], f1, gradf1, Hessf1, kmax, tolgrad, c1, rho, btmax, beta);
+[xk2,fk2,gradfk_norm2,k2,xseq2,btseq2,tau_new2,alphas2,pks2] = ...
+    modified_newton_method2([1;1], f1, gradf1, Hessf1, kmax, tolgrad, c1, rho, btmax, beta);
 
-disp(" Matrice correzioni per rendere Bk def.pos.");
-sum(tauk,"all")
+% Assert Metodo 1
+assert(norm(gradfk_norm1) < tolgrad, 'f1: gradiente finale troppo grande (method1)');
+assert(all(tau_new1(:) >= 0), 'f1: tau negativo trovato (method1)');
+for i = 1:k1
+    f_curr = f1(xseq1(:,i));
+    f_next = f1(xseq1(:,i+1));
+    grad_curr = gradf1(xseq1(:,i));
+    p_curr = pks1(:,i);
+    alpha_curr = alphas1(i);
+    armijo = f_curr + c1*alpha_curr*(grad_curr'*p_curr);
+    assert(f_next <= armijo + 1e-12, 'f1: Armijo non soddisfatta (method1)');
+end
+assert(size(xseq1,2) == k1+1, 'f1: xseq dimensione errata (method1)');
+assert(length(btseq1) == k1, 'f1: btseq dimensione errata (method1)');
+assert(length(alphas1) == k1, 'f1: alphas dimensione errata (method1)');
+assert(size(pks1,2) == k1, 'f1: pks dimensione errata (method1)');
 
-%%
-% Esempio: Rosenbrock
-f = @(x) 100*(x(2)-x(1)^2)^2 + (1-x(1))^2;
-gradf = @(x) [ -400*x(1)*(x(2)-x(1)^2) - 2*(1-x(1));
-                200*(x(2)-x(1)^2) ];
-hessf = @(x) [ 1200*x(1)^2-400*x(2)+2 , -400*x(1);
-                -400*x(1)             , 200 ];
+% Assert Metodo 2
+assert(norm(gradfk_norm2) < tolgrad, 'f1: gradiente finale troppo grande (method2)');
+assert(all(tau_new2(:) >= 0), 'f1: tau negativo trovato (method2)');
+for i = 1:k2
+    f_curr = f1(xseq2(:,i));
+    f_next = f1(xseq2(:,i+1));
+    grad_curr = gradf1(xseq2(:,i));
+    p_curr = pks2(:,i);
+    alpha_curr = alphas2(i);
+    armijo = f_curr + c1*alpha_curr*(grad_curr'*p_curr);
+    assert(f_next <= armijo + 1e-12, 'f1: Armijo non soddisfatta (method2)');
+end
+assert(size(xseq2,2) == k2+1, 'f1: xseq dimensione errata (method2)');
+assert(length(btseq2) == k2, 'f1: btseq dimensione errata (method2)');
+assert(length(alphas2) == k2, 'f1: alphas dimensione errata (method2)');
+assert(size(pks2,2) == k2, 'f1: pks dimensione errata (method2)');
 
-x0 = [-1.2; 1];
+disp(['Metodo 1: xk = ', mat2str(xk1), ', fk = ', num2str(fk1)]);
+disp(['Metodo 2: xk = ', mat2str(xk2), ', fk = ', num2str(fk2)]);
+disp('Convergenza su f1: DONE');
 
-[xk,fk,gn,k,xseq,btseq,tau_new,alphas,pks] = ...
-    modified_newton_method2(x0,f,gradf,hessf,200,1e-8,1e-4,0.5,20,1e-3);
+%% Section f2
+disp('Test funzione f2');
+[xk1,fk1,gradfk_norm1,k1,xseq1,btseq1,tau_new1,alphas1,pks1] = ...
+    modified_newton_method([1;1], f2, gradf2, Hessf2, kmax, tolgrad, c1, rho, btmax, beta);
+[xk2,fk2,gradfk_norm2,k2,xseq2,btseq2,tau_new2,alphas2,pks2] = ...
+    modified_newton_method2([1;1], f2, gradf2, Hessf2, kmax, tolgrad, c1, rho, btmax, beta);
+
+% Assert Metodo 1
+assert(norm(gradfk_norm1) < tolgrad, 'f2: gradiente finale troppo grande (method1)');
+assert(all(tau_new1(:) >= 0), 'f2: tau negativo trovato (method1)');
+for i = 1:k1
+    f_curr = f2(xseq1(:,i));
+    f_next = f2(xseq1(:,i+1));
+    grad_curr = gradf2(xseq1(:,i));
+    p_curr = pks1(:,i);
+    alpha_curr = alphas1(i);
+    armijo = f_curr + c1*alpha_curr*(grad_curr'*p_curr);
+    assert(f_next <= armijo + 1e-12, 'f2: Armijo non soddisfatta (method1)');
+end
+assert(size(xseq1,2) == k1+1, 'f2: xseq dimensione errata (method1)');
+assert(length(btseq1) == k1, 'f2: btseq dimensione errata (method1)');
+assert(length(alphas1) == k1, 'f2: alphas dimensione errata (method1)');
+assert(size(pks1,2) == k1, 'f2: pks dimensione errata (method1)');
+
+% Assert Metodo 2
+assert(norm(gradfk_norm2) < tolgrad, 'f2: gradiente finale troppo grande (method2)');
+assert(all(tau_new2(:) >= 0), 'f2: tau negativo trovato (method2)');
+for i = 1:k2
+    f_curr = f2(xseq2(:,i));
+    f_next = f2(xseq2(:,i+1));
+    grad_curr = gradf2(xseq2(:,i));
+    p_curr = pks2(:,i);
+    alpha_curr = alphas2(i);
+    armijo = f_curr + c1*alpha_curr*(grad_curr'*p_curr);
+    assert(f_next <= armijo + 1e-12, 'f2: Armijo non soddisfatta (method2)');
+end
+assert(size(xseq2,2) == k2+1, 'f2: xseq dimensione errata (method2)');
+assert(length(btseq2) == k2, 'f2: btseq dimensione errata (method2)');
+assert(length(alphas2) == k2, 'f2: alphas dimensione errata (method2)');
+assert(size(pks2,2) == k2, 'f2: pks dimensione errata (method2)');
+
+disp(['Metodo 1: xk = ', mat2str(xk1), ', fk = ', num2str(fk1)]);
+disp(['Metodo 2: xk = ', mat2str(xk2), ', fk = ', num2str(fk2)]);
+disp('Convergenza su f2: DONE');
+
+%% Section f3
+disp('Test funzione f3');
+[xk1,fk1,gradfk_norm1,k1,xseq1,btseq1,tau_new1,alphas1,pks1] = ...
+    modified_newton_method([1;1], f3, gradf3, Hessf3, kmax, tolgrad, c1, rho, btmax, beta);
+[xk2,fk2,gradfk_norm2,k2,xseq2,btseq2,tau_new2,alphas2,pks2] = ...
+    modified_newton_method2([1;1], f3, gradf3, Hessf3, kmax, tolgrad, c1, rho, btmax, beta);
+
+% Assert Metodo 1
+assert(norm(gradfk_norm1) < tolgrad, 'f3: gradiente finale troppo grande (method1)');
+assert(all(tau_new1(:) >= 0), 'f3: tau negativo trovato (method1)');
+for i = 1:k1
+    f_curr = f3(xseq1(:,i));
+    f_next = f3(xseq1(:,i+1));
+    grad_curr = gradf3(xseq1(:,i));
+    p_curr = pks1(:,i);
+    alpha_curr = alphas1(i);
+    armijo = f_curr + c1*alpha_curr*(grad_curr'*p_curr);
+    assert(f_next <= armijo + 1e-12, 'f3: Armijo non soddisfatta (method1)');
+end
+assert(size(xseq1,2) == k1+1, 'f3: xseq dimensione errata (method1)');
+assert(length(btseq1) == k1, 'f3: btseq dimensione errata (method1)');
+assert(length(alphas1) == k1, 'f3: alphas dimensione errata (method1)');
+assert(size(pks1,2) == k1, 'f3: pks dimensione errata (method1)');
+
+% Assert Metodo 2
+assert(norm(gradfk_norm2) < tolgrad, 'f3: gradiente finale troppo grande (method2)');
+assert(all(tau_new2(:) >= 0), 'f3: tau negativo trovato (method2)');
+for i = 1:k2
+    f_curr = f3(xseq2(:,i));
+    f_next = f3(xseq2(:,i+1));
+    grad_curr = gradf3(xseq2(:,i));
+    p_curr = pks2(:,i);
+    alpha_curr = alphas2(i);
+    armijo = f_curr + c1*alpha_curr*(grad_curr'*p_curr);
+    assert(f_next <= armijo + 1e-12, 'f3: Armijo non soddisfatta (method2)');
+end
+assert(size(xseq2,2) == k2+1, 'f3: xseq dimensione errata (method2)');
+assert(length(btseq2) == k2, 'f3: btseq dimensione errata (method2)');
+assert(length(alphas2) == k2, 'f3: alphas dimensione errata (method2)');
+assert(size(pks2,2) == k2, 'f3: pks dimensione errata (method2)');
+
+disp(['Metodo 1: xk = ', mat2str(xk1), ', fk = ', num2str(fk1)]);
+disp(['Metodo 2: xk = ', mat2str(xk2), ', fk = ', num2str(fk2)]);
+disp('Convergenza su f3: DONE');
+
+%% CODICE PER IL PLOT CASO N=2
 
 %Plot unico
 figure(77); clf; hold on;
@@ -168,7 +283,7 @@ xlabel('x_1'); ylabel('x_2');
 [X,Y] = meshgrid(linspace(min(xseq(1,:))-1, max(xseq(1,:))+1, 300), ...
                  linspace(min(xseq(2,:))-1, max(xseq(2,:))+1, 300));
 
-Z = arrayfun(@(i,j) f([i;j]), X, Y);
+Z = arrayfun(@(i,j) f_3([i;j]), X, Y);
 contour(X,Y,Z,40,'LineColor',[0.7 0.7 0.7]);
 
 % Step-by-step plotting
@@ -190,3 +305,6 @@ legend({'Contorno f', ...
         'Iterati', ...
         'Direzioni p_k', ...
         'Step effettivi \alpha_k p_k'}, 'Location','best');
+
+
+
