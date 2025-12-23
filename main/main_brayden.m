@@ -42,10 +42,12 @@ end
 
 %% 2. FULL EXPERIMENT RUN for actual configuration 
 disp('***   PROBLEM NUMBER 5   ***');
-dim = [2, 1e3, 1e4, 1e5];
-experimentalMAtrix
-for n = dim
+dim = [2, 1e3];%, 1e4, 1e5];
+experimentalMatrix = struct(); % initializing a struct to store the test results
+dim_idx = 0;
 
+for n = dim
+    dim_idx = dim_idx + 1;
     fprintf('\n--- Dimension n = %d ---\n', n);
     
     % Starting point
@@ -58,6 +60,11 @@ for n = dim
     % function, its gradient and the hessian matrix
     [f, grad, hess] = get_broyden_functions(p);
     
+
+    % Store size information
+    experimentalMatrix(dim_idx).n = n;
+    experimentalMatrix(dim_idx).runs = struct();
+
     % Loop for applying the MNM with different starting point
     for j = 1:size(X0, 2)
         x0 = X0(:, j);
@@ -67,6 +74,19 @@ for n = dim
             x0, f, grad, hess, kmax, tolgrad, c1, rho, btmax, beta);
         time = toc;
         
+        % Storing results
+        experimentalMatrix(dim_idx).runs(j).x0 = x0;
+        experimentalMatrix(dim_idx).runs(j).xk = xk;
+        experimentalMatrix(dim_idx).runs(j).fk = fk;
+        experimentalMatrix(dim_idx).runs(j).gradfk_norm = gradfk_norm;
+        experimentalMatrix(dim_idx).runs(j).k = k;
+        experimentalMatrix(dim_idx).runs(j).time = time;
+        experimentalMatrix(dim_idx).runs(j).xseq = xseq;
+        experimentalMatrix(dim_idx).runs(j).btseq = btseq;
+        experimentalMatrix(dim_idx).runs(j).tau_new = tau_new;
+        experimentalMatrix(dim_idx).runs(j).alphas = alphas;
+        experimentalMatrix(dim_idx).runs(j).pks = pks;
+
         fprintf('Start Point %d: Iters: %d, Final f: %.2e, GradNorm: %.2e, Time: %.4fs\n', ...
             j, k, fk, gradfk_norm, time);
     end
@@ -82,3 +102,22 @@ end
 % convergenza globale tramite backtracking di Armijo. 
 % Il parametro beta=1e-3 assicura che Bk sia ben condizionata, 
 % evitando errori numerici nel solutore diretto R\(R'\(-gradfk)).
+
+%% Output grafici 
+dims = arrayfun(@(s) s.n, experimentalMatrix);
+mean_iters = arrayfun(@(s) mean([s.runs.k]), experimentalMatrix);
+
+figure;
+loglog(dims, mean_iters, '-o');
+xlabel('Dimensione n');
+ylabel('Iterazioni medie');
+grid on;
+
+idx = 1; % ad esempio n = 1e4
+times = [experimentalMatrix(idx).runs.time];
+
+figure;
+plot(times, '-o');
+xlabel('Run');
+ylabel('Tempo (s)');
+grid on;
