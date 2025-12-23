@@ -43,7 +43,11 @@ while k < kmax && gradfk_norm >= tolgrad
 
     % Modified Hessian until SPD
     for j = 1:maxtau
-        Bk = Hk + tauk(j)*eye(n);
+        if n > 1e-4
+            Bk = Hk+tauk(j)*speye(n); 
+        else
+            Bk = Hk+tauk(j)*eye(n); 
+        end
         [R,flag] = chol(Bk);
         if flag == 0
             break

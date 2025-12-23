@@ -139,7 +139,7 @@ while k < kmax && gradfk_norm >= tolgrad
     
     % Check if the hessian matrix is positive definite
     % !!! only necessary not sufficient condition (implement other)
-    diagHk = diag(Hk);
+    diagHk = full(diag(Hk));
     isPositive = all(diagHk>tol);
 
     if isPositive == true
@@ -159,8 +159,13 @@ while k < kmax && gradfk_norm >= tolgrad
     % attempt to perform the incomplete choleski factorization: 
     % if Bk is not positive definite, then you get an error and try improve it.
     for j = 1:maxit
-            Bk = Hk+tauk(j)*eye(size(Hk)); % !!! dovremmo controllare che Bk sia simmetrica prima di usare chol?
-            
+
+            if n > 1e-4
+                Bk = Hk+tauk(j)*speye(n); % !!! dovremmo controllare che Bk sia simmetrica prima di usare chol?
+            else
+                Bk = Hk+tauk(j)*eye(n); 
+            end
+
             [R,flag] = chol(Bk);
 
             % Chech if the correction is good enough (Is Bk positive definite?)
@@ -263,6 +268,8 @@ end
 %     : definire dei controlli di coerenza per i parametri in modo da 
 %       non andare a lavorare nell'ordine della precisione di macchina
 % DONE: aggiungere dei controlli generici sugli input
+%     : controllare sparsità dell'hessiana issparse(H)
+
 
 % ALTRO
 %     : (diagHk = diag(Hk); isPositive = all(diagHk>tol);) E' condizione necessaria ma non sufficiente! 
