@@ -103,11 +103,7 @@ end
 % Il parametro beta=1e-3 assicura che Bk sia ben condizionata, 
 % evitando errori numerici nel solutore diretto R\(R'\(-gradfk)).
 
-% TO DO
-% Sarebbe forse più opportuno controllare anche il numero di iterazioni per
-% la convergenza k, e bisognerebbe essere sicuri che trovi il minimo
-% globale e non locale, si può calcolare il minimo teorico e studiare il 
-% tuning dei parametri per massimizzare il numero di convergenze globali
+% 
 
 %% Output grafici 
 dims = arrayfun(@(s) s.n, experimentalMatrix);
