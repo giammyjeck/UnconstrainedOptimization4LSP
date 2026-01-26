@@ -1,37 +1,43 @@
 function [f,gradf,hessf,xbar] = problem_broyden31()
-% PROBLEM_BROYDEN31
 % ------------------------------------------------------------
-% Problem 31: Broyden tridiagonal least squares
+% Problem 31: Broyden tridiagonal least–squares problem
 %
-% r_k(x) = (3-2x_k)x_k - x_{k-1} - 2x_{k+1} + 1, con x_0 = x_{n+1} = 0
-% F(x) = 1/2 * ||r(x)||^2
+% The residuals are defined as:
+%   r_k(x) = (3 - 2*x_k)*x_k - x_{k-1} - 2*x_{k+1} + 1,
+%   with boundary conditions: x_0 = x_{n+1} = 0.
 %
-% grad: J^T r
-% Hess: J^T J - 4*diag(r) (può essere indefinita -> tau-correction utile)
+% The objective function has least–squares form:
+%   F(x) = 0.5 * ||r(x)||^2 = 0.5 * sum_{k=1}^n r_k(x)^2
+%
+% Gradient and Hessian:
+%   grad F(x) = J(x)' * r(x)
+%   Hess F(x) = J(x)' * J(x) - 4 * diag(r(x))
 %
 % OUTPUT:
-%   f, gradf, hessf : handle
-%   xbar            : funzione handle che dato n ritorna xbar (qui -ones)
+%   f, gradf, hessf : handle to F(x), grad(F(x)), hess(F(x))
+%   xbar   : handle that returns the standard starting point xbar(n)
 
 f     = @Ffun;
 gradf = @gfun;
 hessf = @Hfun;
 
-% xbar richiesto: x_l = -1
+% Required starting point:
+%   xbar_k = -1  for all k
 xbar = @(n) -ones(n,1);
 
+    % Residual vector
     function r = rvec(x)
         n = length(x);
-        xm1 = [0; x(1:n-1)];
-        xp1 = [x(2:n); 0];
+        xm1 = [0; x(1:n-1)]; %x_{k-1}
+        xp1 = [x(2:n); 0]; %x_{k+1}
         r = (3 - 2*x).*x - xm1 - 2*xp1 + 1;
     end
-
+    
     function Fx = Ffun(x)
         r = rvec(x);
         Fx = 0.5 * (r' * r);
     end
-
+    
     function g = gfun(x)
         n = length(x);
         r = rvec(x);
