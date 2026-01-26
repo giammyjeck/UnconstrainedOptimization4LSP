@@ -1,24 +1,40 @@
 function [xk,fk,gradfk_norm,k,xseq,btseq,pks,inner_iters] = truncated_newton_method(x0,f,gradf,hessf,kmax,tolgrad,c1,rho,btmax,max_cg) 
-% TRUNCATED_NEWTON_METHOD  
-%   [xk,fk,gradfk_norm,k,xseq,btseq, pseq, inner_iters] =
-%       truncated_newton_method(x0,f,gradf,hessf,kmax,tolgrad,c1,rho,btmax,max_cg)
+% TRUNCATED_NEWTON_METHOD Solves unconstrained optimization problems.
+%   This function implements the Truncated Newton method (also known as 
+%   Newton-CG). It uses a Conjugate Gradient (CG) inner loop to compute 
+%   the descent direction and an Armijo-backtracking line search for 
+%   global convergence.
 %
-% Input arguments:
-%   x0, f, gradf, hessf: initial guess, function, gradient of f, hessian
-%   matrix of f
-%   kmax: max outer iterations
-%   max_xg: max conjugate gradient iterations, i.e. inner iterations
-%   tolgrad: stopping tolerance on ||grad f||
-%   c1, rho, btmax: Armijo/backtracking parameters
-%   non so se ci vuole beta input del modified
-
+%   [xk, fk, gradfk_norm, k, xseq, btseq, pks, inner_iters] = ...
+%       TRUNCATED_NEWTON_METHOD(x0, f, gradf, hessf, kmax, tolgrad, c1, rho, btmax, max_cg)
+%
+%   INPUT ARGUMENTS:
+%       x0          - Initial guess (column vector)
+%       f           - Function handle for f(x)
+%       gradf       - Function handle for the gradient gradf(x)
+%       hessf       - Function handle for the Hessian matrix H(x)
+%       kmax        - Maximum number of outer (Newton) iterations
+%       tolgrad     - Stopping tolerance on the norm of the gradient
+%       c1          - Armijo condition parameter (0 < c1 < 1)
+%       rho         - Backtracking reduction factor (0 < rho < 1)
+%       btmax       - Maximum number of backtracking steps per iteration
+%       max_cg      - Maximum number of inner (CG) iterations
+%
+%   OUTPUT ARGUMENTS:
+%       xk          - Final point reached by the algorithm
+%       fk          - Function value at xk
+%       gradfk_norm - Norm of the gradient at xk
+%       k           - Total number of outer iterations performed
+%       xseq        - Sequence of points generated (including x0)
+%       btseq       - Number of backtracking steps per iteration
+%       pks         - Sequence of descent directions computed
+%       inner_iters - Number of CG iterations performed at each step k
 
     % Function handle for the armijo condition
     farmijo = @(fk, alpha, c1_gradfk_pk) ...
         fk + alpha * c1_gradfk_pk;
-    
-    
-    
+
+    % Variables iniziatization
     xseq = zeros(length(x0), kmax);
     btseq = zeros(1, kmax);
     alphas = zeros(1, kmax);
@@ -30,76 +46,72 @@ function [xk,fk,gradfk_norm,k,xseq,btseq,pks,inner_iters] = truncated_newton_met
     fk = f(xk);
     gradfk = gradf(xk);
     gradfk_norm = norm(gradfk);
+    
     k = 1;
-
-      
-    
-    
-
     while k <= kmax && gradfk_norm >= tolgrad
-        
-        z = zeros(length(x0),1); %si deve resettare ad ogni iterazione k
-        p_tn = []; % p_tn is the variable containing the final descent direction
-        j = 0;
-      
-        Hk = hessf(xk);
-        Bk = Hk;
+
+
+        % The system we need to solve is Hess(fk)*pk = -graf(fk) <-> Bk*z=ck
+        z = zeros(length(x0),1); 
+        Bk = hessf(xk);
         ck = -gradfk;
+
+        % Initialize p_tn with the steepest descent direction (-gradfk) 
+        % as a fallback to guarantee a valid descent direction even if 
+        % the CG inner loop fails or terminates at the first iteration.
+        p_tn = ck; 
+
         eta_k = min(0.5, sqrt(gradfk_norm));
-        rk = ck-Bk*z; % Residual of the system, at the first iteration z = 0 so rk = ck
+
+        rk = ck - Bk * z; % Residual of the system, at the first iteration z = 0 so rk = ck.
         rk_old = rk'*rk;
-        dk = rk; % d is the conjugate direction, at the first iteration z = 0 so dk = ck
+        dk = rk; % d is the conjugate direction, at the first iteration z = 0 so dk = ck.
 
         stop_inner = false; % Boolean variable used to understand whether the inner loop got to convergence, it has to go back to false at each iteration k
-
-        while ~stop_inner && j < max_cg
+        
+        j = 0;
+        while ~stop_inner && j < max_cg % Inner loop for solving the system with CG
 
             j = j+1;
-
-            curv = dk'*Bk*dk;
+            Bdk = Bk*dk;
+            curv = dk'*Bdk;
             
-            if curv > 0
-
-                alpha_j = (rk'*rk)/(curv);
+            if curv > 0 % If the curvature is positive we can proceed with CG method.
+                alpha_j = rk_old/curv;
                 z = z + alpha_j * dk;
-                rk = rk - alpha_j * Bk * dk; % chat dice che va il - ma la pieraccini ha scritto +
+                rk = rk - alpha_j * Bdk; % chat dice che va il - ma la pieraccini ha scritto +
 
-                % check on convergence
+                % Check on convergence
                 if norm(rk) <= eta_k * norm(ck)
-
                     p_tn = z;      
-                    inner_it = j;      
                     stop_inner = true;
-
-                break;
-
-            end
-
+                    break;
+                end
+                
+                % Update for the next iteration
                 rk_new = rk'*rk;
-
                 beta_j = rk_new/rk_old;
-                dk = rk+beta_j*dk;
-                rk_old = rk_new; %aggiornamento per il passo successivo
-            else
-                if j == 1 % sarebbe il caso j = 0 ma ho gia aggiornato j
+                dk = rk + beta_j * dk;
+                rk_old = rk_new; 
+                p_tn = z;
+
+            else % Negative or zero curvature case
+                if j == 1 
                     p_tn = -gradfk;
                     
                 else
                     p_tn = z;
-                end
-                inner_it = j;
+                end            
                 stop_inner = true;
 
                 break
             end
-
-            
         end
 
-        inner_iters(k) = inner_it;
+        inner_iters(k) = j;
         pk = p_tn;
         
-        % BACKTRACKING
+        % Backtracking strategy
         if norm(pk) == 0
             disp('Truncated Newton: null direction, stop.');
             return;
@@ -112,42 +124,38 @@ function [xk,fk,gradfk_norm,k,xseq,btseq,pks,inner_iters] = truncated_newton_met
         bt = 0;
 
         while bt < btmax && fnew > farmijo(fk, alpha, c1_gradfk_pk)
-            alpha = rho * alpha;        % riduzione passo
+            alpha = rho * alpha; % step reduction
             xnew = xk + alpha * pk;
             fnew = f(xnew);
             bt = bt + 1;
         end
-        
+
         if bt == btmax && fnew > farmijo(fk, alpha, c1_gradfk_pk)
-            disp('Backtracking: massimo raggiunto (Truncated Newton)');
+            disp('Backtracking (Truncated Newton): maximum number of iterations reached.');
             break;            
         end
                 
-        % AGGIORNAMENTO VARIABILI
+        % Update variables
         xk = xnew;
         fk = fnew;
         gradfk = gradf(xk);
         gradfk_norm = norm(gradfk);
         k = k + 1;
         
+        % Storage
         xseq(:, k) = xk;
         btseq(k) = bt;
         pks(:, k) = pk;
         alphas(k) = alpha;
 
-
     end %while loop on k
 
-% Taglio matrici
+% Truncate sequences to the actual number of iterations
 xseq   = xseq(:, 1:k);
 btseq  = btseq(1:k);
 alphas = alphas(1:k);
 pks    = pks(:, 1:k);
 
-% Inserisco x0 come primo punto per l'animazione
-xseq = [x0, xseq];
-
-
-
+xseq = [x0, xseq]; 
 
 end %function end
