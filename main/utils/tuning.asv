@@ -1,6 +1,5 @@
-
 %% =============================================
-%% PARAMETER TUNING FOR MODIFIED NEWTON METHOD
+%% PARAMETER TUNING FOR MODIFIED NEWTON METHOD (REFACTORED)
 %% =============================================
 clear; clc; close all;
 addpath(genpath(pwd));
@@ -12,51 +11,55 @@ rng(346710);
 [f, gradf, hessf, xbar_gen] = problem_broyden31();
 
 %% ---------------- Fixed parameters ----------------
-tolgrad = 1e-6;      % Convergence criterion
-c1      = 1e-4;      % Armijo parameter
-alpha_loss = 0.01;   % weight for iterations in loss
+tolgrad     = 1e-6;      % Convergence criterion
+c1          = 1e-4;      % Armijo parameter
+alpha_loss  = 0.01;      % weight for iterations in loss
 
 %% ---------------- Grid parameters ----------------
-gamma_grid = [1e-6, 1e-5, 1e-4, 1e-3, 1e-2];   % scaling for beta
-rho_grid   = [0.3, 0.5, 0.8];                 % backtracking contraction
-kmax_grid  = [2000, 1000, 500];               % optional tuning for max iterations
+gamma_grid = [1e-6, 1e-5, 1e-4, 1e-3, 1e-2];
+rho_grid   = [0.3, 0.5, 0.8];
+kmax_grid  = [2000, 1000, 500];
 
 %% ---------------- PHASE 1: COARSE SCREENING ----------------
 fprintf('=== PHASE 1: COARSE SCREENING ===\n');
 
-dims_screen = 1e3;    % cheap dimension
-n_starts_1  = 5;      % few starting points
+dims_screen = 1e3; 
+n_starts_1  = 10;
 
 candidates = [];
-cfg_log = {};
-cfg_id = 0;
-
-skipped_btmax_fail = [];  % salva configurazioni condannate a fallire per btmax
+skipped_btmax_fail = [];
 
 for gamma = gamma_grid
     for rho = rho_grid
-        
         % Compute maximum btmax compatible with machine precision
-        btmax_max = floor(log(eps)/log(rho));  % rho^btmax >= eps -> btmax <= log(eps)/log(rho)
-
+        btmax_max = floor(log(eps)/log(rho));
         if btmax_max > 1
-            btmax_grid_rho = round(linspace(1, btmax_max, min(4, btmax_max)));
+            btmax_grid_rho = round(linspace(btmax_max, 1,min(4, btmax_max)));
         else
             btmax_grid_rho = 1;
-        end      
+        end
 
         for btmax = btmax_grid_rho
             for kmax_test = kmax_grid
-                
-                % Verifica se questa configurazione è già condannata a fallire
+
+                % Skip configurations already known to fail
                 if ~isempty(skipped_btmax_fail) && any(skipped_btmax_fail(:,1) == gamma & ...
                        skipped_btmax_fail(:,2) == rho & ...
-                       skipped_btmax_fail(:,3) == btmax & ...
-                       skipped_btmax_fail(:,4) <= kmax_test)
-                    fprintf('  skipped: gamma=%g rho=%g btmax=%d kmax=%d (btmax fail)\n', ...
+                       skipped_btmax_fail(:,3) == btmax &  ...
+                       skipped_btmax_fail(:,4) >= kmax_test)
+                    fprintf('  skipped: gamma=%g rho=%g btmax=%d kmax=%d (known fail)\n', ...
                             gamma, rho, btmax, kmax_test);
                     continue;
                 end
+                if ~isempty(skipped_btmax_fail) && any(skipped_btmax_fail(:,1) == gamma & ...
+                       skipped_btmax_fail(:,2) == rho & ...
+                       skipped_btmax_fail(:,3) >= btmax & ...
+                       skipped_btmax_fail(:,4) == kmax_test)
+                    fprintf('  skipped: gamma=%g rho=%g btmax=%d kmax=%d (known fail bt)\n', ...
+                            gamma, rho, btmax, kmax_test);
+                    continue;
+                end
+
 
                 beta = gamma * dims_screen;
                 success = true;
@@ -64,7 +67,7 @@ for gamma = gamma_grid
 
                 % Generate starting points
                 x0_base = xbar_gen(dims_screen);
-                x0_rand = (x0_base - 1) + 2*rand(dims_screen, n_starts_1-1);
+                x0_rand = (x0_base-1) + 2*rand(dims_screen, n_starts_1-1);
                 all_x0  = [x0_base, x0_rand];
 
                 for s = 1:size(all_x0,2)
@@ -72,17 +75,13 @@ for gamma = gamma_grid
                         all_x0(:,s), f, gradf, hessf, ...
                         kmax_test, tolgrad, c1, rho, btmax, beta);
 
-                    % Early stop if fails
+                    % Check for failure
                     if gnorm > tolgrad
                         success = false;
-                        fail_reason = sprintf('grad_norm_high, start=%d', s);
-                                                
-                        if btseq(1,end) >= btmax
-                            success = false;
-                            fail_reason = 'grad_norm_high_or_btmax';
+                        fail_reason = 'grad_norm_high';
+                        if  btseq(1,end) >= btmax
                             skipped_btmax_fail = [skipped_btmax_fail; gamma, rho, btmax, kmax_test];
                         end
-          
                         break;
                     end
                     if k >= kmax_test
@@ -92,21 +91,10 @@ for gamma = gamma_grid
                     end
                 end
 
-                % Store config log
-                cfg_id = cfg_id + 1;
-                cfg_log{cfg_id}.gamma = gamma;
-                cfg_log{cfg_id}.rho   = rho;
-                cfg_log{cfg_id}.btmax = btmax;
-                cfg_log{cfg_id}.kmax  = kmax_test;
-                cfg_log{cfg_id}.phase = 1;
-                cfg_log{cfg_id}.success = success;
-                cfg_log{cfg_id}.fail_reason = fail_reason;
-
-                % Keep candidates that pass screening
+                % Keep only successful configurations
                 if success
                     candidates = [candidates; gamma, rho, btmax, kmax_test];
-                    fprintf('  kept: gamma=%g rho=%g btmax=%d kmax=%d\n', ...
-                        gamma, rho, btmax, kmax_test);
+                    fprintf('  kept: gamma=%g rho=%g btmax=%d kmax=%d\n', gamma, rho, btmax, kmax_test);
                 else
                     fprintf('  discarded: gamma=%g rho=%g btmax=%d kmax=%d | reason: %s\n', ...
                         gamma, rho, btmax, kmax_test, fail_reason);
@@ -117,114 +105,167 @@ for gamma = gamma_grid
 end
 fprintf('Candidates after screening: %d\n', size(candidates,1));
 
-%% ---------------- PHASE 2: REFINEMENT ----------------
-fprintf('\n=== PHASE 2: REFINEMENT ===\n');
-dims_ref = [1e3, 1e4];
-n_starts_2 = 10;
-
-refined = struct();
+%% ---------------- PHASE 2: REFINEMENT 1 (cheap) ----------------
+fprintf('\n=== PHASE 2: REFINEMENT 1 ===\n');
+dims_ref_1 = 1e3;       % cheap dimension
+n_starts_2 = 20;
+refined_1 = struct();
 r_id = 0;
+
+% loss weights
+w_g  = 10;
+w_k  = 1;
+w_bt = 1;
 
 for i = 1:size(candidates,1)
     gamma = candidates(i,1);
     rho   = candidates(i,2);
     btmax = candidates(i,3);
-    kmax_test = candidates(i,4);
+    kmax  = candidates(i,4);
 
-    total_time = 0;
-    total_iters = 0;
-    n_runs = 0;
+    beta = gamma * dims_ref_1;
     success = true;
     fail_reason = '';
 
-    for n = dims_ref
+    % configuration loss = worst run
+    L_cfg = -Inf;
+
+    % Generate starting points
+    x0_base = xbar_gen(dims_ref_1);
+    x0_rand = (x0_base-1) + 2*rand(dims_ref_1, n_starts_2-1);
+    all_x0  = [x0_base, x0_rand];
+
+    for s = 1:size(all_x0,2)
+        [~, ~, gnorm, k, ~, btseq] = modified_newton_method( ...
+            all_x0(:,s), f, gradf, hessf, ...
+            kmax, tolgrad, c1, rho, btmax, beta);
+
+        if abs(gnorm -tolgrad)>1e-6
+            success = false;
+            fail_reason = 'grad_norm_high';
+            break;
+        end
+        if k >= kmax
+            success = false;
+            fail_reason = sprintf('max_iter, start=%d', s);
+            break;
+        end
+
+        phi     = max(0,log10(gnorm / tolgrad));
+        k_norm  = k / kmax;
+        bt_norm = sum(btseq) / (k * btmax);
+
+        L_run = w_g*phi + w_k*k_norm + w_bt*bt_norm;
+        L_cfg = max(L_cfg, L_run);
+    end
+
+    r_id = r_id + 1;
+    refined_1(r_id).gamma = gamma;
+    refined_1(r_id).rho   = rho;
+    refined_1(r_id).btmax = btmax;
+    refined_1(r_id).kmax  = kmax;
+    refined_1(r_id).success = success;
+    refined_1(r_id).fail_reason = fail_reason;
+
+    if success
+        refined_1(r_id).loss = L_cfg;
+        fprintf('  kept: gamma=%g rho=%g btmax=%d kmax=%d | loss=%.4f\n', ...
+            gamma, rho, btmax, kmax, L_cfg);
+    else
+        refined_1(r_id).loss = Inf;
+        fprintf('  discarded: gamma=%g rho=%g btmax=%d kmax=%d | reason: %s\n', ...
+            gamma, rho, btmax, kmax, fail_reason);
+    end
+end
+
+
+%% ---------------- PHASE 3: REFINEMENT 2 (deep, two dimensions) ----------------
+fprintf('\n=== PHASE 3: REFINEMENT 2 ===\n');
+dims_ref_2 = [1e3, 1e4];   % two dimensions
+refined_2 = struct();
+r_id = 0;
+
+% Select promising configurations from refinement 1 (top 10% lowest loss)
+losses_1 = [refined_1.loss];
+promising_idx = find(losses_1 < prctile(losses_1, 10));
+
+for i = promising_idx
+    cfg = refined_1(i);
+    gamma = cfg.gamma;
+    rho   = cfg.rho;
+    btmax = cfg.btmax;
+    kmax  = cfg.kmax;
+
+    success = true;
+    fail_reason = '';
+    L_cfg = -Inf;
+
+    for n = dims_ref_2
         beta = gamma * n;
 
+        % Generate starting points
         x0_base = xbar_gen(n);
-        x0_rand = (x0_base - 1) + 2*rand(n, n_starts_2-1);
+        x0_rand = (x0_base-1) + 2*rand(n, n_starts_2-1);
         all_x0  = [x0_base, x0_rand];
 
         for s = 1:size(all_x0,2)
-            tic;
-            [~, ~, gnorm, k] = modified_newton_method(...
+            [~, ~, gnorm, k, ~, btseq] = modified_newton_method( ...
                 all_x0(:,s), f, gradf, hessf, ...
-                kmax_test, tolgrad, c1, rho, btmax, beta);
-            t = toc;
+                kmax, tolgrad, c1, rho, btmax, beta);
 
             if gnorm > tolgrad
                 success = false;
                 fail_reason = sprintf('grad_norm_high at n=%d, start=%d', n, s);
                 break;
             end
-            if k >= kmax_test
+            if k >= kmax
                 success = false;
                 fail_reason = sprintf('max_iter at n=%d, start=%d', n, s);
                 break;
             end
 
-            total_time  = total_time + t;
-            total_iters = total_iters + k;
-            n_runs = n_runs + 1;
+            phi     = max(0, log10(gnorm / tolgrad));
+            k_norm  = k / kmax;
+            bt_norm = sum(btseq) / (k * btmax);
+
+            L_run = w_g*phi + w_k*k_norm + w_bt*bt_norm;
+            L_cfg = max(L_cfg, L_run);
         end
-        if ~success, break; end
+
+        if ~success
+            break;
+        end
     end
 
     r_id = r_id + 1;
-    refined(r_id).gamma = gamma;
-    refined(r_id).rho   = rho;
-    refined(r_id).btmax = btmax;
-    refined(r_id).kmax  = kmax_test;
-    refined(r_id).success = success;
-    refined(r_id).fail_reason = fail_reason;
+    refined_2(r_id).gamma = gamma;
+    refined_2(r_id).rho   = rho;
+    refined_2(r_id).btmax = btmax;
+    refined_2(r_id).kmax  = kmax;
+    refined_2(r_id).success = success;
+    refined_2(r_id).fail_reason = fail_reason;
 
     if success
-        avg_time  = total_time / n_runs;
-        avg_iters = total_iters / n_runs;
-        refined(r_id).avg_time  = avg_time;
-        refined(r_id).avg_iters = avg_iters;
-        refined(r_id).loss = avg_time + alpha_loss*avg_iters;
+        refined_2(r_id).loss = L_cfg;
         fprintf('  kept: gamma=%g rho=%g btmax=%d kmax=%d | loss=%.4f\n', ...
-            gamma, rho, btmax, kmax_test, refined(r_id).loss);
+            gamma, rho, btmax, kmax, L_cfg);
     else
-        refined(r_id).loss = Inf;
+        refined_2(r_id).loss = Inf;
         fprintf('  discarded: gamma=%g rho=%g btmax=%d kmax=%d | reason: %s\n', ...
-            gamma, rho, btmax, kmax_test, fail_reason);
+            gamma, rho, btmax, kmax, fail_reason);
     end
 end
 
-%% ---------------- PHASE 3: FINAL SELECTION ----------------
-fprintf('\n=== PHASE 3: FINAL SELECTION ===\n');
-losses = [refined.loss];
-[~, best_idx] = min(losses);
-best = refined(best_idx);
+
+%% ---------------- PHASE 4: FINAL SELECTION ----------------
+fprintf('\n=== PHASE 4: FINAL SELECTION ===\n');
+losses_final = [refined_2.loss];
+[~, best_idx] = min(losses_final);
+best = refined_2(best_idx);
 
 fprintf('\nBEST CONFIGURATION FOUND:\n');
 fprintf(' gamma  = %.1e\n', best.gamma);
 fprintf(' rho    = %.2f\n', best.rho);
 fprintf(' btmax  = %d\n', best.btmax);
 fprintf(' kmax   = %d\n', best.kmax);
-fprintf(' avg time  = %.4f s\n', best.avg_time);
-fprintf(' avg iters = %.2f\n', best.avg_iters);
-fprintf(' loss      = %.4f\n', best.loss);
-
-%% ---------------- SAVE RESULTS TO TXT ----------------
-fileID = fopen('tuning_results.txt','w');
-fprintf(fileID,'gamma\trho\tbtmax\tkmax\tsuccess\tavg_time\tavg_iters\tloss\tfail_reason\n');
-for i = 1:length(refined)
-    if refined(i).success
-        status = 1;
-        avg_time = refined(i).avg_time;
-        avg_iters = refined(i).avg_iters;
-        loss_val = refined(i).loss;
-    else
-        status = 0;
-        avg_time = NaN;
-        avg_iters = NaN;
-        loss_val = Inf;
-    end
-    fprintf(fileID,'%.1e\t%.2f\t%d\t%d\t%d\t%.4f\t%.2f\t%.4f\t%s\n', ...
-        refined(i).gamma, refined(i).rho, refined(i).btmax, refined(i).kmax, ...
-        status, avg_time, avg_iters, loss_val, refined(i).fail_reason);
-end
-fclose(fileID);
-fprintf('\nResults saved to tuning_results.txt\n');
+fprintf(' loss   = %.4f\n', best.loss);
