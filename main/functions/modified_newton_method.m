@@ -1,4 +1,4 @@
-function [xk,fk,gradfk_norm,k,xseq,btseq,tau_new,alphas,pks] = modified_newton_method(x0,f,gradf,hessf,kmax,tolgrad,c1,rho,btmax,beta)
+function [xk,fk,gradfk_norm,k,xseq,btseq,alphas,gradfk_seq,fk_seq,tau_new,pks] = modified_newton_method(x0,f,gradf,hessf,kmax,tolgrad,c1,rho,btmax,beta)
 
 % MODIFIED_NEWTON_METHOD  Modified Newton method with Hessian correction
 % [xk, fk, gradfk_norm, k, xseq, btseq, tau_new,alphas,pks] = ...
@@ -126,6 +126,8 @@ maxit = 100;    % max number of iteration to check the positivness of Hk diagona
 xseq = zeros(length(x0), kmax); % matrix to store computed solution 
 btseq = zeros(1, kmax);         % vector to store number of backtracking iteration  
 alphas = zeros(1, kmax);
+gradfk_seq    = zeros(1, kmax);
+fk_seq     = zeros(1, kmax);
 pks = zeros(length(x0),kmax);
 tau_new = zeros(maxit+1,kmax); % matrix to save the values of tau_k
 
@@ -244,6 +246,8 @@ while k < kmax && gradfk_norm >= tolgrad
     tau_new(:, k)   = tauk; %Store current tauk values
     alphas(k)    = alpha;
     pks(:, k)    = pk;
+    gradfk_seq(k)    = gradfk_norm;
+    fk_seq(k)     = fk;
 
 end
 
@@ -253,6 +257,8 @@ xseq   = xseq(:, 1:k);
 btseq  = btseq(1:k);
 alphas = alphas(1:k);
 pks    = pks(:, 1:k);
+gradfk_seq    = gradfk_seq(1:k);
+fk_seq     = fk_seq(1:k);
 
 % "Add" x0 at the beginning of xseq (otherwise the first el. is x1)
 xseq = [x0, xseq];

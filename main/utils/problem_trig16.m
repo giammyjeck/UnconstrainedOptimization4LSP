@@ -44,4 +44,5 @@ xbar = @(n) ones(n,1);
         H = spdiags(d, 0, n, n);
     end
 
+
 end

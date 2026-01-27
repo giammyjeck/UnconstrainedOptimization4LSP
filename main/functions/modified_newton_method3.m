@@ -1,5 +1,5 @@
-function [xk,fk,gn,k,xseq,btseq,alphas,gnseq,fseq,tau_hist] = ...
-    modified_newton_method(x0,f,gradf,hessf,kmax,tolgrad,c1,rho,btmax,beta,store_seq)
+function [xk,fk,gradfk_norm,k,xseq,btseq,alphas,gnseq,fseq,tau_hist] = ...
+    modified_newton_method3(x0,f,gradf,hessf,kmax,tolgrad,c1,rho,btmax,beta,store_seq)
 % MODIFIED_NEWTON_METHOD
 % ------------------------------------------------------------
 % Modified Newton con:

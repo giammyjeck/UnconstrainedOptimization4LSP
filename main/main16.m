@@ -1,27 +1,31 @@
 %% Main Script for Problem 16
 clear; clc; close all;
+addpath(genpath(pwd))
 
-seed = 346710; 
-rng(seed);
+student_id = 346710; 
+rng(student_id);
 
 % Defining the problem
 [f, gradf, hessf, xbar_gen] = problem_trig16();
 
 % Parameters definition
-dimensions = [2, 10^3, 10^4]; % NEED TO ADD 10^5
+dim = [2, 10^3, 10^4]; % NEED TO ADD 10^5
 kmax = 1000;
 tolgrad = 1e-6;
 c1 = 1e-4;      % Standard Armijo parameter
 rho = 0.5;      % Backtracking contraction factor
 btmax = 20;
 max_cg = 500;   % Max inner iterations for the conjugate gradient solving method in the truncated one
+beta = 1e-3; % Correction parameter for the Hessian
 
+dim_idx =0;
 % Data structures to store results 
-results_tn = struct();
+experimentalMatrix = struct(); % initializing a struct to store the test results
 
-for i = 1:length(dimensions) % Loop on the problem dimension
-    n = dimensions(i);
-    fprintf('\n--- Test dimension n = %d ---\n', n);
+for n = dim % Loop on the problem dimension
+    dim_idx = dim_idx + 1;
+
+    fprintf('\n--- Test dimension n = %d (Function 16) ---\n', n);
 
     fprintf('%-10s | %-10s | %-10s | %-8s | %-6s | %-10s | %-8s\n', ...
         'start.pt', 'grad.norm', 'iters/max', 'success', 'flag', 'rate(exp)', 'time');
@@ -35,7 +39,11 @@ for i = 1:length(dimensions) % Loop on the problem dimension
     all_x0 = [x0_standard, x0_random];
 
     n_success = 0; sum_gnorm = 0; sum_iters = 0; sum_time = 0; sum_rate = 0;
-    
+
+    % Store size information
+    experimentalMatrix(dim_idx).n = n;
+    experimentalMatrix(dim_idx).runs = struct();
+
     for s = 1:6 % Loop on the 6 starting point
         x0_curr = all_x0(:, s);
         point_label = sprintf('n%d_pt%d', n, s);
@@ -63,15 +71,19 @@ for i = 1:length(dimensions) % Loop on the problem dimension
         
         % Stima del rate di convergenza (esponente p)
         rate_exp = estimate_rate(xseq_tn, gradf);
-        %Salvataggio
-        results_tn.(point_label).time = time_tn;
-        results_tn.(point_label).iters = k_tn;
-        results_tn.(point_label).gnorm = gnorm_tn;
-
-        if s == 1
-            % Salviamo xseq solo per il punto standard per poterlo plottare dopo
-            results_tn.(point_label).xseq = xseq_tn;
-        end
+        
+        % Storing results
+        experimentalMatrix(dim_idx).runs(s).x0 = x0_curr;
+        experimentalMatrix(dim_idx).runs(s).xk = xk_tn;
+        experimentalMatrix(dim_idx).runs(s).fk = fk_tn;
+        experimentalMatrix(dim_idx).runs(s).gradfk_norm = gnorm_tn;
+        experimentalMatrix(dim_idx).runs(s).k = k_tn;
+        experimentalMatrix(dim_idx).runs(s).time = time_tn;
+        experimentalMatrix(dim_idx).runs(s).xseq = xseq_tn;
+        experimentalMatrix(dim_idx).runs(s).btseq = btseq_tn;
+        experimentalMatrix(dim_idx).runs(s).inner_it = inner_tn;
+        %experimentalMatrix(dim_idx).runs(s).alphas = alphas;
+        experimentalMatrix(dim_idx).runs(s).pks = pks_tn;
 
         if is_success
             n_success = n_success + 1;
@@ -100,42 +112,88 @@ for i = 1:length(dimensions) % Loop on the problem dimension
     fprintf('------------------------------------------------------------------------------------------\n');
 end
 
-%% --- VISUALIZATION (Last n) ---
-last_n = dimensions(end);
-std_label = sprintf('n%d_pt1', last_n);
-if isfield(results_tn, std_label)
-    figure('Name', ['Convergence Analysis n = ' num2str(last_n)]);
-    
-    subplot(2,1,1);
-    gnorms_plot = generate_gnorm_seq(results_tn.(std_label).xseq, gradf);
-    semilogy(0:results_tn.(std_label).iters, gnorms_plot, '-bo', 'LineWidth', 1.2, 'MarkerSize', 3);
-    grid on;
-    title(['Gradient Norm Decay (n=' num2str(last_n) ')']);
-    xlabel('Iteration (k)'); ylabel('||\nabla f(x_k)||');
-    
-    subplot(2,1,2);
-    all_times = arrayfun(@(s) results_tn.(sprintf('n%d_pt%d', last_n, s)).time, 1:6);
-    bar(all_times, 'FaceColor', [0.3 0.5 0.9]);
-    set(gca, 'XTickLabel', {'x_bar', 'R1', 'R2', 'R3', 'R4', 'R5'});
-    title('Execution Time per Starting Point');
-    ylabel('Time (s)');
-end
-
-%% --- HELPER FUNCTIONS ---
-function p = estimate_rate(xseq, gradf)
-    if size(xseq, 2) < 4, p = NaN; return; end
-    g3 = norm(gradf(xseq(:, end)));
-    g2 = norm(gradf(xseq(:, end-1)));
-    g1 = norm(gradf(xseq(:, end-2)));
-    if g1 < 1e-14 || g2 < 1e-14 || g3 < 1e-14, p = NaN; return; end
-    p = log(g3/g2) / log(g2/g1);
-    if p < 0 || p > 3, p = NaN; end
-end
-
-function gnorms = generate_gnorm_seq(xseq, gradf)
-    num_pts = size(xseq, 2); 
-    gnorms = zeros(1, num_pts);
-    for j = 1:num_pts
-        gnorms(j) = norm(gradf(xseq(:,j)));
-    end
-end
+% %% Output grafici 
+% dims = arrayfun(@(s) s.n, experimentalMatrix);
+% mean_iters = arrayfun(@(s) mean([s.runs.k]), experimentalMatrix);
+% 
+% figure;
+% loglog(dims, mean_iters, '-o');
+% xlabel('Dimensione n');
+% ylabel('Iterazioni medie');
+% grid on;
+% 
+% idx = 3; % ad esempio n = 1e4
+% times = [experimentalMatrix(idx).runs.time];
+% 
+% figure;
+% plot(times, '-o');
+% xlabel('Run');
+% ylabel('Tempo (s)');
+% grid on;
+% 
+% 
+% %% --- GLOBAL SCALABILITY ANALYSIS ---
+% %% Analisi della Scalabilità al variare della Dimensione (n)
+% % I grafici di scalabilità permettono di valutare l'efficienza del metodo Truncated Newton 
+% % nel gestire problemi di dimensioni crescenti. Il primo grafico (Log-Log) mette in 
+% % relazione il tempo medio di esecuzione con la dimensione n: un andamento prossimo 
+% % alla linearità conferma che l'algoritmo scala in modo efficiente, evitando l'onere 
+% % computazionale cubico tipico del Newton puro grazie all'approssimazione del sistema 
+% % lineare tramite il Gradiente Coniugato. Il secondo grafico (Semilog-X) mostra invece 
+% % come il numero di iterazioni esterne rimanga pressoché costante o cresca in modo 
+% % estremamente contenuto al variare di n; questa proprietà, nota come "indipendenza 
+% % dalla dimensione", è un indicatore di robustezza algoritmica e dimostra come 
+% % l'informazione del secondo ordine (Hessiana) venga sfruttata efficacemente per 
+% % mantenere un'elevata velocità di convergenza anche su problemi a larga scala.
+% figure('Name', 'Scalability Analysis: Truncated Newton');
+% 
+% avg_times = zeros(1, length(dim));
+% avg_iters = zeros(1, length(dim));
+% 
+% for i = 1:length(dim)
+%     n = dim(i);
+%     sum_t = 0; sum_it = 0; count = 0;
+%     for s = 1:6
+%         label = sprintf('n%d_pt%d', n, s);
+%         if results_tn.(label).grad_norm < tolgrad
+%             sum_t = sum_t + results_tn.(label).time;
+%             sum_it = sum_it + results_tn.(label).iters;
+%             count = count + 1;
+%         end
+%     end
+%     if count > 0
+%         avg_times(i) = sum_t / count;
+%         avg_iters(i) = sum_it / count;
+%     end
+% end
+% 
+% subplot(1,2,1);
+% loglog(dim, avg_times, '-ro', 'LineWidth', 2, 'MarkerSize', 8);
+% grid on;
+% title('Computational Effort vs Dimension');
+% xlabel('Problem Dimension (n)'); ylabel('Average Time (s)');
+% 
+% subplot(1,2,2);
+% semilogx(dim, avg_iters, '-bs', 'LineWidth', 2, 'MarkerSize', 8);
+% grid on;
+% title('Iterations vs Dimension');
+% xlabel('Problem Dimension (n)'); ylabel('Average Newton Iterations');
+% 
+% %% --- HELPER FUNCTIONS ---
+ function p = estimate_rate(xseq, gradf)
+     if size(xseq, 2) < 4, p = NaN; return; end
+     g3 = norm(gradf(xseq(:, end)));
+     g2 = norm(gradf(xseq(:, end-1)));
+     g1 = norm(gradf(xseq(:, end-2)));
+     if g1 < 1e-14 || g2 < 1e-14 || g3 < 1e-14, p = NaN; return; end
+     p = log(g3/g2) / log(g2/g1);
+     if p < 0 || p > 3, p = NaN; end
+ end
+% 
+% function grad_norm = generate_gnorm_seq(xseq, gradf)
+%     num_pts = size(xseq, 2); 
+%     grad_norm = zeros(1, num_pts);
+%     for j = 1:num_pts
+%         grad_norm(j) = norm(gradf(xseq(:,j)));
+%     end
+% end
