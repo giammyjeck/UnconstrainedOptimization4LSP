@@ -46,7 +46,7 @@ for n = dim % Loop on the problem dimension
 
     for s = 1:6 % Loop on the 6 starting point
         x0_curr = all_x0(:, s);
-        point_label = sprintf('n%d_pt%d', n, s);
+        % point_label = sprintf('n%d_pt%d', n, s);
         
         tic;
         [xk_tn, fk_tn, gnorm_tn, k_tn, xseq_tn, btseq_tn, pks_tn, inner_tn] = ...
@@ -111,6 +111,14 @@ for n = dim % Loop on the problem dimension
     end
     fprintf('------------------------------------------------------------------------------------------\n');
 end
+
+% --- PLOTTING ---
+% Chiama la funzione per generare tutti i grafici richiesti
+outputs(experimentalMatrix, f, gradf);
+
+
+
+
 
 % %% Output grafici 
 % dims = arrayfun(@(s) s.n, experimentalMatrix);
