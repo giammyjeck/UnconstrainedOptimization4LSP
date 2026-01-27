@@ -51,7 +51,7 @@ for n = dim % Loop on the problem dimension
         tic;
         %[xk_tn, fk_tn, gnorm_tn, k_tn, xseq_tn, btseq_tn, pks_tn, inner_tn] = ...
         %    truncated_newton_method(x0_curr, f, gradf, hessf, kmax, tolgrad, c1, rho, btmax, max_cg);
-        [xk_tn,fk_tn,gnorm_tn,k_tn,xseq_tn,btseq_tn,alphas,gradfk_seq,fk_seq,tau_new,pks] = modified_newton_method(x0_curr,f,gradf,hessf,kmax,tolgrad,c1,rho,btmax,beta);
+        [xk,fk,gradfk_norm,k,xseq,btseq,alphas,gradfk_seq,fk_seq,tau_new,pks] = modified_newton_method(x0,f,gradf,hessf,kmax,tolgrad,c1,rho,btmax,beta)
         time_tn = toc;
         
         %CALCOLO DATI PER TABELLA
@@ -82,9 +82,9 @@ for n = dim % Loop on the problem dimension
         experimentalMatrix(dim_idx).runs(s).time = time_tn;
         experimentalMatrix(dim_idx).runs(s).xseq = xseq_tn;
         experimentalMatrix(dim_idx).runs(s).btseq = btseq_tn;
-        %experimentalMatrix(dim_idx).runs(s).inner_it = inner_tn;
-        %%experimentalMatrix(dim_idx).runs(s).alphas = alphas;
-        %experimentalMatrix(dim_idx).runs(s).pks = pks_tn;
+        experimentalMatrix(dim_idx).runs(s).inner_it = inner_tn;
+        %experimentalMatrix(dim_idx).runs(s).alphas = alphas;
+        experimentalMatrix(dim_idx).runs(s).pks = pks_tn;
 
         if is_success
             n_success = n_success + 1;
