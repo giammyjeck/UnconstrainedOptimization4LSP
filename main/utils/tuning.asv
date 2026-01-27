@@ -52,7 +52,7 @@ for gamma = gamma_grid
                 if ~isempty(skipped_btmax_fail) && any(skipped_btmax_fail(:,1) == gamma & ...
                        skipped_btmax_fail(:,2) == rho & ...
                        skipped_btmax_fail(:,3) == btmax & ...
-                       skipped_btmax_fail(:,4) >= kmax_test)
+                       skipped_btmax_fail(:,4) <= kmax_test)
                     fprintf('  skipped: gamma=%g rho=%g btmax=%d kmax=%d (btmax fail)\n', ...
                             gamma, rho, btmax, kmax_test);
                     continue;
@@ -78,6 +78,7 @@ for gamma = gamma_grid
                         fail_reason = sprintf('grad_norm_high, start=%d', s);
                                                 
                         if btseq(1,end) >= btmax
+                            success = false;
                             fail_reason = 'grad_norm_high_or_btmax';
                             skipped_btmax_fail = [skipped_btmax_fail; gamma, rho, btmax, kmax_test];
                         end
@@ -145,7 +146,7 @@ for i = 1:size(candidates,1)
 
         for s = 1:size(all_x0,2)
             tic;
-            [~, ~, gnorm, k, ~, btseq] = modified_newton_method(...
+            [~, ~, gnorm, k] = modified_newton_method(...
                 all_x0(:,s), f, gradf, hessf, ...
                 kmax_test, tolgrad, c1, rho, btmax, beta);
             t = toc;
@@ -153,12 +154,6 @@ for i = 1:size(candidates,1)
             if gnorm > tolgrad
                 success = false;
                 fail_reason = sprintf('grad_norm_high at n=%d, start=%d', n, s);
-                
-                if btseq(1,end) >= btmax
-                    fail_reason = 'grad_norm_high_or_btmax';
-                    skipped_btmax_fail = [skipped_btmax_fail; gamma, rho, btmax, kmax_test];
-                end
-          
                 break;
             end
             if k >= kmax_test

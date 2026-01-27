@@ -6,7 +6,7 @@ student_id = 346710;
 rng(student_id);
 
 % Defining the problem
-[f, gradf, hessf, xbar_gen] = problem_trig16();
+[f, gradf, hessf, xbar_gen] = problem_broyden31();
 
 % Parameters definition
 dim = [2, 10^3, 10^4]; % NEED TO ADD 10^5
@@ -51,7 +51,7 @@ for n = dim % Loop on the problem dimension
         tic;
         %[xk_tn, fk_tn, gnorm_tn, k_tn, xseq_tn, btseq_tn, pks_tn, inner_tn] = ...
         %    truncated_newton_method(x0_curr, f, gradf, hessf, kmax, tolgrad, c1, rho, btmax, max_cg);
-        [xk_tn,fk_tn,gnorm_tn,k_tn,xseq_tn,btseq_tn,alphas,gradfk_seq,fk_seq,tau_new,pks] = modified_newton_method(x0_curr,f,gradf,hessf,kmax,tolgrad,c1,rho,btmax,beta);
+        [xk_tn,fk_tn,gnorm_tn,k_tn,xseq_tn,btseq_tn,alphas,gradfk_seq,fk_seq,tau_new] = modified_newton_method(x0_curr,f,gradf,hessf,kmax,tolgrad,c1,rho,btmax,beta);
         time_tn = toc;
         
         %CALCOLO DATI PER TABELLA

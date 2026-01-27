@@ -212,7 +212,7 @@ while k < kmax && gradfk_norm >= tolgrad
 
         % Riduci alpha
         alpha = rho * alpha;  
-        %fprintf('alpha = %.3e at bt = %.1f\n', alpha, bt);
+        fprintf('alpha = %.3e at bt = %.1f\n', alpha, bt);
     
         % Aggiorna xnew e fnew
         xnew = xk + alpha * pk;

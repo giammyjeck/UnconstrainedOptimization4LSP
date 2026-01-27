@@ -20,7 +20,7 @@ beta = 1e-3; % Correction parameter for the Hessian
 
 dim_idx =0;
 % Data structures to store results 
-experimentalMatrix = struct(); % initializing a struct to store the test results
+experimentalMatrix = struct(); 
 
 for n = dim % Loop on the problem dimension
     dim_idx = dim_idx + 1;
@@ -51,7 +51,7 @@ for n = dim % Loop on the problem dimension
         tic;
         %[xk_tn, fk_tn, gnorm_tn, k_tn, xseq_tn, btseq_tn, pks_tn, inner_tn] = ...
         %    truncated_newton_method(x0_curr, f, gradf, hessf, kmax, tolgrad, c1, rho, btmax, max_cg);
-        [xk,fk,gradfk_norm,k,xseq,btseq,alphas,gradfk_seq,fk_seq,tau_new,pks] = modified_newton_method(x0,f,gradf,hessf,kmax,tolgrad,c1,rho,btmax,beta)
+        [xk_tn,fk_tn,gnorm_tn,k_tn,xseq_tn,btseq_tn,alphas,gradfk_seq,fk_seq,tau_new] = modified_newton_method(x0_curr,f,gradf,hessf,kmax,tolgrad,c1,rho,btmax,beta);
         time_tn = toc;
         
         %CALCOLO DATI PER TABELLA
@@ -82,9 +82,9 @@ for n = dim % Loop on the problem dimension
         experimentalMatrix(dim_idx).runs(s).time = time_tn;
         experimentalMatrix(dim_idx).runs(s).xseq = xseq_tn;
         experimentalMatrix(dim_idx).runs(s).btseq = btseq_tn;
-        experimentalMatrix(dim_idx).runs(s).inner_it = inner_tn;
-        %experimentalMatrix(dim_idx).runs(s).alphas = alphas;
-        experimentalMatrix(dim_idx).runs(s).pks = pks_tn;
+        %experimentalMatrix(dim_idx).runs(s).inner_it = inner_tn;
+        %%experimentalMatrix(dim_idx).runs(s).alphas = alphas;
+        %experimentalMatrix(dim_idx).runs(s).pks = pks_tn;
 
         if is_success
             n_success = n_success + 1;
@@ -115,79 +115,9 @@ end
 
 % --- PLOTTING ---
 % Chiama la funzione per generare tutti i grafici richiesti
-outputs(experimentalMatrix, f, gradf);
+outputs(experimentalMatrix, f, gradf, "Problem16_Trig");
 
 
-
-
-
-% %% Output grafici 
-% dims = arrayfun(@(s) s.n, experimentalMatrix);
-% mean_iters = arrayfun(@(s) mean([s.runs.k]), experimentalMatrix);
-% 
-% figure;
-% loglog(dims, mean_iters, '-o');
-% xlabel('Dimensione n');
-% ylabel('Iterazioni medie');
-% grid on;
-% 
-% idx = 3; % ad esempio n = 1e4
-% times = [experimentalMatrix(idx).runs.time];
-% 
-% figure;
-% plot(times, '-o');
-% xlabel('Run');
-% ylabel('Tempo (s)');
-% grid on;
-% 
-% 
-% %% --- GLOBAL SCALABILITY ANALYSIS ---
-% %% Analisi della Scalabilità al variare della Dimensione (n)
-% % I grafici di scalabilità permettono di valutare l'efficienza del metodo Truncated Newton 
-% % nel gestire problemi di dimensioni crescenti. Il primo grafico (Log-Log) mette in 
-% % relazione il tempo medio di esecuzione con la dimensione n: un andamento prossimo 
-% % alla linearità conferma che l'algoritmo scala in modo efficiente, evitando l'onere 
-% % computazionale cubico tipico del Newton puro grazie all'approssimazione del sistema 
-% % lineare tramite il Gradiente Coniugato. Il secondo grafico (Semilog-X) mostra invece 
-% % come il numero di iterazioni esterne rimanga pressoché costante o cresca in modo 
-% % estremamente contenuto al variare di n; questa proprietà, nota come "indipendenza 
-% % dalla dimensione", è un indicatore di robustezza algoritmica e dimostra come 
-% % l'informazione del secondo ordine (Hessiana) venga sfruttata efficacemente per 
-% % mantenere un'elevata velocità di convergenza anche su problemi a larga scala.
-% figure('Name', 'Scalability Analysis: Truncated Newton');
-% 
-% avg_times = zeros(1, length(dim));
-% avg_iters = zeros(1, length(dim));
-% 
-% for i = 1:length(dim)
-%     n = dim(i);
-%     sum_t = 0; sum_it = 0; count = 0;
-%     for s = 1:6
-%         label = sprintf('n%d_pt%d', n, s);
-%         if results_tn.(label).grad_norm < tolgrad
-%             sum_t = sum_t + results_tn.(label).time;
-%             sum_it = sum_it + results_tn.(label).iters;
-%             count = count + 1;
-%         end
-%     end
-%     if count > 0
-%         avg_times(i) = sum_t / count;
-%         avg_iters(i) = sum_it / count;
-%     end
-% end
-% 
-% subplot(1,2,1);
-% loglog(dim, avg_times, '-ro', 'LineWidth', 2, 'MarkerSize', 8);
-% grid on;
-% title('Computational Effort vs Dimension');
-% xlabel('Problem Dimension (n)'); ylabel('Average Time (s)');
-% 
-% subplot(1,2,2);
-% semilogx(dim, avg_iters, '-bs', 'LineWidth', 2, 'MarkerSize', 8);
-% grid on;
-% title('Iterations vs Dimension');
-% xlabel('Problem Dimension (n)'); ylabel('Average Newton Iterations');
-% 
 % %% --- HELPER FUNCTIONS ---
  function p = estimate_rate(xseq, gradf)
      if size(xseq, 2) < 4, p = NaN; return; end
@@ -198,11 +128,3 @@ outputs(experimentalMatrix, f, gradf);
      p = log(g3/g2) / log(g2/g1);
      if p < 0 || p > 3, p = NaN; end
  end
-% 
-% function grad_norm = generate_gnorm_seq(xseq, gradf)
-%     num_pts = size(xseq, 2); 
-%     grad_norm = zeros(1, num_pts);
-%     for j = 1:num_pts
-%         grad_norm(j) = norm(gradf(xseq(:,j)));
-%     end
-% end

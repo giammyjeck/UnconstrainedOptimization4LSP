@@ -1,143 +1,109 @@
-function [xk,fk,gradfk_norm,k,xseq,btseq,alphas,gnseq,fseq,tau_hist] = ...
-    modified_newton_method3(x0,f,gradf,hessf,kmax,tolgrad,c1,rho,btmax,beta,store_seq)
-% MODIFIED_NEWTON_METHOD
-% ------------------------------------------------------------
-% Modified Newton con:
-%  - correzione Hessiana: Bk = Hk + tau*I finché SPD (Cholesky ok)
-%  - direzione: pk = -Bk^{-1} gk (risolta con Cholesky)
-%  - backtracking line search (Armijo)
-%  - tau-retry: se backtracking fallisce, aumento tau e riprovo (robustezza)
-%
-% INPUT:
-%   x0        : punto iniziale (n×1)
-%   f         : handle f(x)
-%   gradf     : handle grad f(x)
-%   hessf     : handle Hess f(x) (meglio sparse)
-%   kmax      : max iterazioni
-%   tolgrad   : tolleranza su ||grad||
-%   c1,rho    : parametri Armijo/backtracking
-%   btmax     : max iterazioni backtracking
-%   beta      : minimo shift tau
-%   store_seq : true -> salva xseq (consigliato solo per n=2)
-%
-% OUTPUT:
-%   xk,fk,gn,k
-%   xseq      : sequenza dei punti (solo se store_seq=true), include x0 come 1ª colonna
-%   btseq     : # backtracking a ogni iterazione
-%   alphas    : alpha scelti
-%   gnseq     : ||grad|| a ogni iterazione
-%   fseq      : f(xk) a ogni iterazione
-%   tau_hist  : tau usato a ogni iterazione
+function [xk,fk,gradfk_norm,k,xseq,btseq,alphas,gradfk_seq,fk_seq,tau_new,pks] = ...
+    modified_newton_method3(x0,f,gradf,hessf,kmax,tolgrad,c1,rho,btmax,beta)
 
-% Parametri interni
-maxtau = 100;        % max tentativi per rendere SPD
-max_retries = 5;     % max tentativi di tau-retry se backtracking fallisce
+% MODIFIED_NEWTON_METHOD3
+% Modified Newton with Hessian correction, backtracking, and tau-retry
+%
+% OUTPUT format aligned with modified_newton_method:
+% xk, fk, gradfk_norm, k, xseq, btseq, alphas, gradfk_seq, fk_seq, tau_new, pks
+
+% Parameters
+maxtau = 100;
+max_retries = 5;
 
 n = length(x0);
-if nargin < 11 || isempty(store_seq)
-    store_seq = (n == 2);
-end
 
-% Allocazioni leggere
-btseq    = zeros(1, kmax);
-alphas   = zeros(1, kmax);
-gnseq    = zeros(1, kmax);
-fseq     = zeros(1, kmax);
-tau_hist = zeros(1, kmax);
+% Preallocations
+xseq = zeros(n, kmax);
+btseq = zeros(1, kmax);
+alphas = zeros(1, kmax);
+gradfk_seq = zeros(1, kmax);
+fk_seq = zeros(1, kmax);
+pks = zeros(n, kmax);
+tau_new = zeros(maxtau+1, kmax); % store tau history per iteration
 
-% Sequenza punti: solo se serve (per n grandi esplode la memoria)
-if store_seq
-    xseq = zeros(n, kmax);
-else
-    xseq = [];
-end
-
-% Inizializzazione
-xk = x0;
+% Initialization
+xk = x0(:);
 fk = f(xk);
-gk = gradf(xk);
-gn = norm(gk);
-k  = 0;
+gradfk = gradf(xk);
+gradfk_norm = norm(gradfk);
+k = 0;
 
-while k < kmax && gn >= tolgrad
-
+while k < kmax && gradfk_norm >= tolgrad
+    
     Hk = hessf(xk);
-
-    % Provo chol su Hk: se fallisce, non SPD
-    [~,flag] = chol(Hk);
-
-    % Tau iniziale "furbo" (usa la diagonale)
-    if flag == 0
+    
+    % Initial tau estimate
+    diagH = diag(Hk);
+    if all(diagH > 0)
         tau = 0;
     else
-        dH = diag(Hk);
-        tau = max(0, -min(dH) + beta);
+        tau = max(0, -min(diagH) + beta);
         if ~isfinite(tau), tau = beta; end
     end
-
-    % Rendo SPD: aumento tau finché chol ok
+    
+    % Make Hessian SPD
+    tauk = zeros(maxtau+1,1);
+    tauk(1) = tau;
     for j = 1:maxtau
-        Bk = Hk + tau * speye(n);
+        Bk = Hk + tau*speye(n);
         [R,flag] = chol(Bk);
         if flag == 0
             break
         else
             tau = max(beta, 2*tau);
+            tauk(j+1) = tau;
         end
     end
-
+    
     if flag ~= 0
-        warning("Correzione tau fallita: Hessiana non resa SPD.");
+        warning('Hessian correction failed: Bk not SPD.');
         break;
     end
-
-    % Direzione Newton modificata
-    pk = R \ (R' \ (-gk));
-
-    % Check direzione di discesa
-    gTp = gk' * pk;
+    
+    % Modified Newton direction
+    pk = R \ (R' \ (-gradfk));
+    
+    % Ensure descent
+    gTp = gradfk' * pk;
     if gTp >= 0
-        pk  = -gk;
-        gTp = -gn^2;
+        pk = -gradfk;
+        gTp = -gradfk_norm^2;
     end
-
-    % Backtracking Armijo
+    
+    % Backtracking line search
     alpha = 1;
     bt = 0;
     xnew = xk + alpha*pk;
     fnew = f(xnew);
-
+    
     while bt < btmax && fnew > fk + c1*alpha*gTp
         alpha = rho*alpha;
         xnew = xk + alpha*pk;
         fnew = f(xnew);
         bt = bt + 1;
     end
-
-    % ---- tau-retry se backtracking fallisce ----
+    
+    % Tau-retry if backtracking fails
     retry = 0;
     while bt == btmax && fnew > fk + c1*alpha*gTp && retry < max_retries
         retry = retry + 1;
-
-        tau = max(beta, 10*tau);          % aumento più aggressivo
-        Bk = Hk + tau * speye(n);
+        tau = max(beta, 10*tau);
+        Bk = Hk + tau*speye(n);
         [R2,flag2] = chol(Bk);
         if flag2 ~= 0
             continue
         end
-
-        pk = R2 \ (R2' \ (-gk));
-        gTp = gk' * pk;
+        pk = R2 \ (R2' \ (-gradfk));
+        gTp = gradfk' * pk;
         if gTp >= 0
-            pk  = -gk;
-            gTp = -gn^2;
+            pk = -gradfk;
+            gTp = -gradfk_norm^2;
         end
-
         alpha = 1;
         bt = 0;
         xnew = xk + alpha*pk;
         fnew = f(xnew);
-
         while bt < btmax && fnew > fk + c1*alpha*gTp
             alpha = rho*alpha;
             xnew = xk + alpha*pk;
@@ -145,44 +111,39 @@ while k < kmax && gn >= tolgrad
             bt = bt + 1;
         end
     end
-
+    
     if bt == btmax && fnew > fk + c1*alpha*gTp
-        warning("Backtracking fallito anche dopo tau-retry: stop.");
+        warning('Backtracking failed even after tau-retry.');
         break;
     end
-    % ------------------------------------------
-
-    % Aggiornamento
-    k = k + 1;
+    
+    % Update iterate
     xk = xnew;
     fk = fnew;
-    gk = gradf(xk);
-    gn = norm(gk);
-
-    % Salvataggi
-    btseq(k)    = bt;
-    alphas(k)   = alpha;
-    gnseq(k)    = gn;
-    fseq(k)     = fk;
-    tau_hist(k) = tau;
-
-    if store_seq
-        xseq(:,k) = xk;
-    end
+    gradfk = gradf(xk);
+    gradfk_norm = norm(gradfk);
+    k = k + 1;
+    
+    % Store results
+    xseq(:,k) = xk;
+    btseq(k) = bt;
+    alphas(k) = alpha;
+    gradfk_seq(k) = gradfk_norm;
+    fk_seq(k) = fk;
+    tau_new(:,k) = tauk;
+    pks(:,k) = pk;
 end
 
-% Taglio a lunghezza effettiva
-btseq    = btseq(1:k);
-alphas   = alphas(1:k);
-gnseq    = gnseq(1:k);
-fseq     = fseq(1:k);
-tau_hist = tau_hist(1:k);
+% Trim arrays
+xseq = xseq(:,1:k);
+btseq = btseq(1:k);
+alphas = alphas(1:k);
+gradfk_seq = gradfk_seq(1:k);
+fk_seq = fk_seq(1:k);
+pks = pks(:,1:k);
+tau_new = tau_new(:,1:k);
 
-% Aggiungo x0 davanti (per plot)
-if store_seq
-    xseq = [x0, xseq(:,1:k)];
-else
-    xseq = [];
-end
+% Prepend x0 to xseq
+xseq = [x0, xseq];
 
 end
