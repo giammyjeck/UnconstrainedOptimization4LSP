@@ -3,6 +3,8 @@ clear; clc; close all;
 
 seed = 346710; 
 rng(seed);
+addpath(genpath(pwd))
+
 
 % Defining the problem
 [f, gradf, hessf, xbar_gen] = problem_broyden31();
