@@ -24,7 +24,7 @@ kmax_grid  = [2000, 1000, 500];
 fprintf('=== PHASE 1: COARSE SCREENING ===\n');
 
 dims_screen = 1e3; 
-n_starts_1  = 10;
+n_starts_1  = 20;
 
 candidates = [];
 skipped_btmax_fail = [];
@@ -35,13 +35,21 @@ for gamma = gamma_grid
         alpha_min = 1e-10;
         btmax_max = floor(log(alpha_min)/log(rho));
         if btmax_max > 1
-            btmax_grid_rho = round(linspace(btmax_max, 1,min(4, btmax_max)));
+            btmax_grid_rho = round(linspace(btmax_max, 3,min(4, btmax_max)));
         else
             btmax_grid_rho = 1;
         end
 
         for btmax = btmax_grid_rho
-            for kmax_test = kmax_grid
+            success_found = false; % flag per saltare kmax maggiori
+
+            for kmax_test = sort(kmax_grid,'ascend')
+
+                if success_found
+                    fprintf('  skipped: gamma=%g rho=%g btmax=%d kmax=%d (already success)\n', ...
+                        gamma, rho, btmax, kmax_test);
+                    continue;
+                end
 
                 % Skip configurations already known to fail
                 if ~isempty(skipped_btmax_fail) && any(skipped_btmax_fail(:,1) == gamma & ...
@@ -71,37 +79,66 @@ for gamma = gamma_grid
                 x0_rand = (x0_base-1) + 2*rand(dims_screen, n_starts_1-1);
                 all_x0  = [x0_base, x0_rand];
 
+                flag_c1_sensitive = false;
+                
                 for s = 1:size(all_x0,2)
                     tic;
                     [~, ~, gnorm, k, ~, btseq] = modified_newton_method( ...
                         all_x0(:,s), f, gradf, hessf, ...
                         kmax_test, tolgrad, c1, rho, btmax, beta);
                     t_run = toc;
+                
+                    bt_reached = (btseq(1,end) >= btmax);
+                
 
-                    % Check for failure
+                    % ---- FAIL: gradient not small ----
                     if gnorm > tolgrad
-                        success = false;
-                        fail_reason = 'grad_norm_high';
-                        if  btseq(1,end) >= btmax
+                       success = false;
+                        % Case A: btmax reached
+                        if bt_reached
+                            % A1: far from stationarity -> structural failure
+                            fail_reason = 'btmax_reached_grad_far';
                             skipped_btmax_fail = [skipped_btmax_fail; gamma, rho, btmax, kmax_test];
+                            break;
                         end
-                        break;
+                    else 
+                        if bt_reached % A2: near stationarity -> c1 too strict
+                            success = false;
+                            fail_reason = 'btmax_reached_grad_near';
+                            flag_c1_sensitive = true;
+                            break;
+                        end
                     end
+
+                    % ---- FAIL: max iterations ----
                     if k >= kmax_test
                         success = false;
                         fail_reason = sprintf('max_iter, start=%d', s);
                         break;
                     end
+                
                 end
 
-                % Keep only successful configurations
+
                 if success
+                    success_found = true;
                     candidates = [candidates; gamma, rho, btmax, kmax_test];
-                    fprintf('  kept: gamma=%g rho=%g btmax=%d kmax=%d\n', gamma, rho, btmax, kmax_test);
+                    fprintf('  kept: gamma=%g rho=%g btmax=%d kmax=%d\n', ...
+                        gamma, rho, btmax, kmax_test);
+                
+                elseif flag_c1_sensitive
+                    % NON scarto: marchio per test con c1 più piccolo
+                    fprintf('  flagged (c1-sensitive): gamma=%g rho=%g btmax=%d kmax=%d\n', ...
+                        gamma, rho, btmax, kmax_test);
+                
+                    % esempio: salvi in una lista separata
+                    c1_sensitive = [c1_sensitive; gamma, rho, btmax, kmax_test];
+                
                 else
                     fprintf('  discarded: gamma=%g rho=%g btmax=%d kmax=%d | reason: %s\n', ...
                         gamma, rho, btmax, kmax_test, fail_reason);
                 end
+
             end
         end
     end
@@ -113,7 +150,7 @@ fprintf('Candidates after screening: %d\n', size(candidates,1));
 %% ---------------- PHASE 2: REFINEMENT 1 (cheap) ----------------
 fprintf('\n=== PHASE 2: REFINEMENT 1 ===\n');
 dims_ref_1 = 1e3;       % cheap dimension
-n_starts_2 = 10;
+n_starts_2 = 30;
 refined_1 = struct();
 r_id = 0;
 
@@ -264,7 +301,7 @@ for i = promising_idx
 
         % Generate starting points
         x0_base = xbar_gen(n);
-        x0_rand = (x0_base-1) + 2*rand(n, n_starts_2-1);
+        x0_rand = (x0_base-1) + 2*rand(n, 10-1);
         all_x0  = [x0_base, x0_rand];
 
         for s = 1:size(all_x0,2)
