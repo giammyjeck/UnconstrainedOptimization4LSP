@@ -10,13 +10,13 @@ addpath(genpath(pwd))
 
 % Parameters definition
 dimensions = [2, 10^3, 10^4, 10^5]; 
-kmax = 1000;
+kmax = 50;
 tolgrad = 1e-6;
-c1 = 1e-4;      % Standard Armijo parameter
-rho = 0.5;      % Backtracking contraction factor
-btmax = 20;
+c1 = 1e-3;      % Standard Armijo parameter
+rho = 0.3;      % Backtracking contraction factor
+btmax = 5;
 max_cg = 500;   % Max inner iterations for the conjugate gradient solving method in the truncated one
-beta = 1e-3;
+beta = 1e-2;
 
 % Data structures to store results 
 results = struct();

@@ -15,7 +15,7 @@ tolgrad   = 1e-6;        % fixed experimenter choice
 
 % parameters to explore (user request)
 rho_levels  = [0.3, 0.5, 0.8];                    % 3 levels
-beta_levels = [1e-4,1e-3,1e-2,1e-1,1,10];         % 6 levels (example: last = 10)
+beta_levels = [1e-4,1e-3,1e-2];         % 6 levels (example: last = 10)
 % Note: last value 10 is large; adapt to your problem if undesired.
 
 % baseline (fixed) values
