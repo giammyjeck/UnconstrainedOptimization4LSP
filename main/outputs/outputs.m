@@ -92,6 +92,55 @@ for m = 1:length(methods)
 
 end
 
+
+%% --- 2D TRAJECTORY PLOT (scatter + contours) per n=2 ---
+idx2D = find(dims == 2, 1);
+if ~isempty(idx2D)
+    n = dims(idx2D);
+    run_labels = labels(contains(labels,sprintf('n%d_',n)));
+    fig2D = figure('Name',[method ' 2D Trajectories'],'Color','w','Units','normalized','Position',[0.1 0.1 0.8 0.4]);
+    hold on; grid on;
+
+    % Raccogli tutti i punti per limiti asse
+    all_pts = [];
+    for s = 1:length(run_labels)
+        r = res_method.(run_labels{s});
+        all_pts = [all_pts, r.xseq]; %#ok<AGROW>
+    end
+    xlims = [min(all_pts(1,:))-0.5, max(all_pts(1,:))+0.5];
+    ylims = [min(all_pts(2,:))-0.5, max(all_pts(2,:))+0.5];
+
+    % Griglia per contour
+    x1 = linspace(xlims(1), xlims(2), 100);
+    x2 = linspace(ylims(1), ylims(2), 100);
+    [X1,X2] = meshgrid(x1,x2);
+    Z = zeros(size(X1));
+    for i = 1:size(X1,1)
+        for j = 1:size(X1,2)
+            Z(i,j) = f([X1(i,j); X2(i,j)]);
+        end
+    end
+
+    
+    % Contour log
+    contour(X1,X2, log10(Z - min(Z(:)) + 1e-9), 25, 'LineColor',[0.7 0.7 0.7]);
+
+    % Scatter + linee della traiettoria per ciascun run
+    colors = lines(length(run_labels));
+    for s = 1:length(run_labels)
+        r = res_method.(run_labels{s});
+        plot(r.xseq(1,:), r.xseq(2,:), '-o', 'Color', colors(s,:), 'MarkerSize',4, 'LineWidth',1.2);
+    end
+    xlabel('x_1'); ylabel('x_2');
+    title(sprintf('%s (n=2) Trajectories + Contours', method));
+    axis([xlims, ylims]);
+    exportgraphics(fig2D, fullfile(figdir,sprintf('%s_%s_n2_trajectories.png', pname, method)));
+    close(fig2D);
+end
+
+
+
+
 Tall = cell2table(allRows, 'VariableNames', {'problem','method','n','start_pt_ID','grad_norm','iters_over_max','success_flag','rate_conv_exp','time_s'});
 writetable(Tall, fullfile(tabdir, sprintf('%s_GLOBAL_table.csv', pname)));
 
