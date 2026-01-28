@@ -72,9 +72,11 @@ for gamma = gamma_grid
                 all_x0  = [x0_base, x0_rand];
 
                 for s = 1:size(all_x0,2)
-                    [~, ~, gnorm, k, ~, btseq] = modified_newton_method(...
+                    tic;
+                    [~, ~, gnorm, k, ~, btseq] = modified_newton_method( ...
                         all_x0(:,s), f, gradf, hessf, ...
                         kmax_test, tolgrad, c1, rho, btmax, beta);
+                    t_run = toc;
 
                     % Check for failure
                     if gnorm > tolgrad
@@ -106,6 +108,8 @@ for gamma = gamma_grid
 end
 fprintf('Candidates after screening: %d\n', size(candidates,1));
 
+
+
 %% ---------------- PHASE 2: REFINEMENT 1 (cheap) ----------------
 fprintf('\n=== PHASE 2: REFINEMENT 1 ===\n');
 dims_ref_1 = 1e3;       % cheap dimension
@@ -114,9 +118,11 @@ refined_1 = struct();
 r_id = 0;
 
 % loss weights
-w_g  = 10;
-w_k  = 1;
-w_bt = 1;
+w_t  = 1;        % tempo domina
+w_g  = 10;       % fortissima penalizzazione se non sei a tol
+w_k  = 0.1;      % regolarizzazione debole
+w_bt = 0.1;      % misura di instabilità, non costo
+
 
 for i = 1:size(candidates,1)
     gamma = candidates(i,1);
@@ -137,9 +143,11 @@ for i = 1:size(candidates,1)
     all_x0  = [x0_base, x0_rand];
 
     for s = 1:size(all_x0,2)
+        tic
         [~, ~, gnorm, k, ~, btseq] = modified_newton_method( ...
             all_x0(:,s), f, gradf, hessf, ...
             kmax, tolgrad, c1, rho, btmax, beta);
+        t_run=toc;
 
         if abs(gnorm -tolgrad)>1e-6
             success = false;
@@ -152,12 +160,13 @@ for i = 1:size(candidates,1)
             break;
         end
 
-        phi     = max(0,log10(gnorm / tolgrad));
-        k_norm  = k / kmax;
-        bt_norm = sum(btseq) / (k * btmax);
-
-        L_run = w_g*phi + w_k*k_norm + w_bt*bt_norm;
+        phi     = max(0, log10(gnorm / tolgrad));
+        k_norm  = k / kmax;        
+        %bt_norm = sum(btseq) / (k * btmax);
+        bt_norm = sum(btseq);
+        L_run = w_t*t_run + w_g*phi + w_k*k_norm ;%+ w_bt*bt_mean;
         L_cfg = max(L_cfg, L_run);
+
     end
 
     r_id = r_id + 1;
@@ -178,6 +187,55 @@ for i = 1:size(candidates,1)
             gamma, rho, btmax, kmax, fail_reason);
     end
 end
+
+
+
+gamma_vals = [refined_1.gamma];
+rho_vals   = [refined_1.rho];
+btmax_vals = [refined_1.btmax];
+kmax_vals  = [refined_1.kmax];
+loss_vals  = [refined_1.loss];
+
+valid = isfinite(loss_vals);
+gamma_vals = gamma_vals(valid);
+rho_vals   = rho_vals(valid);
+btmax_vals = btmax_vals(valid);
+loss_vals  = loss_vals(valid);
+
+figure;
+scatter(gamma_vals, rho_vals, 60, log10(loss_vals), 'filled');
+set(gca,'XScale','log');
+colorbar;
+xlabel('\gamma');
+ylabel('\rho');
+title('Configurazioni: colore = log_{10}(loss)');
+grid on;
+
+figure;
+scatter(rho_vals, btmax_vals, 60, log10(loss_vals), 'filled');
+colorbar;
+xlabel('\rho');
+ylabel('btmax');
+title('Backtracking vs rho (log-loss)');
+grid on;
+
+
+figure;
+scatter(gamma_vals, btmax_vals, 60, log10(loss_vals), 'filled');
+set(gca,'XScale','log');
+colorbar;
+xlabel('\gamma');
+ylabel('btmax');
+title('\gamma vs btmax (log-loss)');
+grid on;
+
+
+thr = prctile(loss_vals,10);
+hold on;
+idx = loss_vals <= thr;
+scatter(gamma_vals(idx), rho_vals(idx), 80, 'k', 'LineWidth', 1.5);
+
+
 
 
 %% ---------------- PHASE 3: REFINEMENT 2 (deep, two dimensions) ----------------
@@ -210,9 +268,11 @@ for i = promising_idx
         all_x0  = [x0_base, x0_rand];
 
         for s = 1:size(all_x0,2)
+            tic;
             [~, ~, gnorm, k, ~, btseq] = modified_newton_method( ...
                 all_x0(:,s), f, gradf, hessf, ...
                 kmax, tolgrad, c1, rho, btmax, beta);
+            t_run = toc;
 
             if gnorm > tolgrad
                 success = false;
@@ -227,10 +287,11 @@ for i = promising_idx
 
             phi     = max(0, log10(gnorm / tolgrad));
             k_norm  = k / kmax;
-            bt_norm = sum(btseq) / (k * btmax);
-
-            L_run = w_g*phi + w_k*k_norm + w_bt*bt_norm;
+            bt_mean = sum(btseq) / max(k,1);
+            
+            L_run = w_t*t_run + w_g*phi + w_k*k_norm ;%+ w_bt*bt_mean;
             L_cfg = max(L_cfg, L_run);
+
         end
 
         if ~success
