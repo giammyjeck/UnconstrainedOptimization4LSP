@@ -1,4 +1,4 @@
-%% Main Script for Problem 16
+%% Main Script for Problem 14
 clear; clc; close all;
 addpath(genpath(pwd))
 
@@ -6,7 +6,7 @@ student_id = 346710;
 rng(student_id);
 
 % Defining the problem
-[f, gradf, hessf, xbar_gen] = problem_trig16();
+[f, gradf, hessf, xbar_gen] = problem14();
 
 % Parameters definition
 dim = [2, 10^3, 10^4]; % NEED TO ADD 10^5
