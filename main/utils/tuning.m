@@ -1,370 +1,323 @@
-%% =============================================
-%% PARAMETER TUNING FOR MODIFIED NEWTON METHOD (REFACTORED)
-%% =============================================
+%% ============================================================
+%% ADAPTIVE TUNING (rho, beta) with adaptive kmax, btmax, conditional c1 fallback
+%% Implements the queue-based strategy you described
+%% ============================================================
 clear; clc; close all;
-addpath(genpath(pwd));
-addpath(genpath("C:/Users/Utente/Desktop/Corsi/Numerical optimization for large scale problems and Stochastic Optimization/NumericalO4LSP/main"));
+addpath(genpath("C:\Users\Utente\Desktop\Corsi\Numerical optimization for large scale problems and Stochastic Optimization\NumericalO4LSP\main"));
 
 rng(346710);
 
-%% ---------------- Problem definition ----------------
+% ---------------- Problem ----------------
 [f, gradf, hessf, xbar_gen] = problem_broyden31();
 
-%% ---------------- Fixed parameters ----------------
-tolgrad     = 1e-6;      % Convergence criterion
-c1          = 1e-4;      % Armijo parameter
-alpha_loss  = 0.01;      % weight for iterations in loss
+% ---------------- Experiment settings (STEP 1) ----------------
+tolgrad   = 1e-6;        % fixed experimenter choice
 
-%% ---------------- Grid parameters ----------------
-gamma_grid = [1e-6, 1e-5, 1e-4, 1e-3, 1e-2];
-rho_grid   = [0.3, 0.5, 0.8];
-kmax_grid  = [2000, 1000, 500];
+% parameters to explore (user request)
+rho_levels  = [0.3, 0.5, 0.8];                    % 3 levels
+beta_levels = [1e-4,1e-3,1e-2,1e-1,1,10];         % 6 levels (example: last = 10)
+% Note: last value 10 is large; adapt to your problem if undesired.
 
-%% ---------------- PHASE 1: COARSE SCREENING ----------------
-fprintf('=== PHASE 1: COARSE SCREENING ===\n');
+% baseline (fixed) values
+c1_baseline  = 1e-4;
+kmax_baseline= 10;
+bt_baseline  = 1;
 
-dims_screen = 1e3; 
-n_starts_1  = 20;
+% allowable escalation levels (kept aside)
+c1_levels = [1e-4, 1e-3];
+kmax_levels = [10,50, 100, 200];
+bt_levels = [1, 5, 10, 20];
 
-candidates = [];
-skipped_btmax_fail = [];
+% runtime sampling for refinement 1
+n_ref1 = 1e3;
+n_starts_ref1 = 15;
 
-for gamma = gamma_grid
-    for rho = rho_grid
-        % Compute maximum btmax compatible with machine precision
-        alpha_min = 1e-10;
-        btmax_max = floor(log(alpha_min)/log(rho));
-        if btmax_max > 1
-            btmax_grid_rho = round(linspace(btmax_max, 3,min(4, btmax_max)));
-        else
-            btmax_grid_rho = 1;
-        end
+% Loss weights (used in ref2 / final)
+w_t = 1;
+w_g = 10;
 
-        for btmax = btmax_grid_rho
-            success_found = false; % flag per saltare kmax maggiori
+% lists to store results
+good_configs = [];   % will store structs for configs that pass ref1
+tested_keys = containers.Map('KeyType','char','ValueType','logical'); % avoid retesting identical configs
 
-            for kmax_test = sort(kmax_grid,'ascend')
+% queue initialization (STEP 2)
+queue = {}; % each entry is struct: rho,beta,c1,kmax,bt,origin
+qhead = 1;
 
-                if success_found
-                    fprintf('  skipped: gamma=%g rho=%g btmax=%d kmax=%d (already success)\n', ...
-                        gamma, rho, btmax, kmax_test);
-                    continue;
-                end
-
-                % Skip configurations already known to fail
-                if ~isempty(skipped_btmax_fail) && any(skipped_btmax_fail(:,1) == gamma & ...
-                       skipped_btmax_fail(:,2) == rho & ...
-                       skipped_btmax_fail(:,3) == btmax &  ...
-                       skipped_btmax_fail(:,4) >= kmax_test)
-                    fprintf('  skipped: gamma=%g rho=%g btmax=%d kmax=%d (known fail)\n', ...
-                            gamma, rho, btmax, kmax_test);
-                    continue;
-                end
-                if ~isempty(skipped_btmax_fail) && any(skipped_btmax_fail(:,1) == gamma & ...
-                       skipped_btmax_fail(:,2) == rho & ...
-                       skipped_btmax_fail(:,3) >= btmax & ...
-                       skipped_btmax_fail(:,4) == kmax_test)
-                    fprintf('  skipped: gamma=%g rho=%g btmax=%d kmax=%d (known fail bt)\n', ...
-                            gamma, rho, btmax, kmax_test);
-                    continue;
-                end
-
-
-                beta = gamma * dims_screen;
-                success = true;
-                fail_reason = '';
-
-                % Generate starting points
-                x0_base = xbar_gen(dims_screen);
-                x0_rand = (x0_base-1) + 2*rand(dims_screen, n_starts_1-1);
-                all_x0  = [x0_base, x0_rand];
-
-                flag_c1_sensitive = false;
-                
-                for s = 1:size(all_x0,2)
-                    tic;
-                    [~, ~, gnorm, k, ~, btseq] = modified_newton_method( ...
-                        all_x0(:,s), f, gradf, hessf, ...
-                        kmax_test, tolgrad, c1, rho, btmax, beta);
-                    t_run = toc;
-                
-                    bt_reached = (btseq(1,end) >= btmax);
-                
-
-                    % ---- FAIL: gradient not small ----
-                    if gnorm > tolgrad
-                       success = false;
-                        % Case A: btmax reached
-                        if bt_reached
-                            % A1: far from stationarity -> structural failure
-                            fail_reason = 'btmax_reached_grad_far';
-                            skipped_btmax_fail = [skipped_btmax_fail; gamma, rho, btmax, kmax_test];
-                            break;
-                        end
-                    else 
-                        if bt_reached % A2: near stationarity -> c1 too strict
-                            success = false;
-                            fail_reason = 'btmax_reached_grad_near';
-                            flag_c1_sensitive = true;
-                            break;
-                        end
-                    end
-
-                    % ---- FAIL: max iterations ----
-                    if k >= kmax_test
-                        success = false;
-                        fail_reason = sprintf('max_iter, start=%d', s);
-                        break;
-                    end
-                
-                end
-
-
-                if success
-                    success_found = true;
-                    candidates = [candidates; gamma, rho, btmax, kmax_test];
-                    fprintf('  kept: gamma=%g rho=%g btmax=%d kmax=%d\n', ...
-                        gamma, rho, btmax, kmax_test);
-                
-                elseif flag_c1_sensitive
-                    % NON scarto: marchio per test con c1 più piccolo
-                    fprintf('  flagged (c1-sensitive): gamma=%g rho=%g btmax=%d kmax=%d\n', ...
-                        gamma, rho, btmax, kmax_test);
-                
-                    % esempio: salvi in una lista separata
-                    c1_sensitive = [c1_sensitive; gamma, rho, btmax, kmax_test];
-                
-                else
-                    fprintf('  discarded: gamma=%g rho=%g btmax=%d kmax=%d | reason: %s\n', ...
-                        gamma, rho, btmax, kmax_test, fail_reason);
-                end
-
-            end
-        end
+for r = rho_levels
+    for b = beta_levels
+        cfg.rho = r;
+        cfg.beta = b;
+        cfg.c1 = c1_baseline;
+        cfg.kmax = kmax_baseline;
+        cfg.bt   = bt_baseline;
+        cfg.origin = 'init';
+        queue{end+1} = cfg;
     end
 end
-fprintf('Candidates after screening: %d\n', size(candidates,1));
 
+fprintf('Initial queue length: %d (expected 18)\n', numel(queue));
 
+% helper to build unique key for a configuration
+make_key = @(cfg) sprintf('r%.6g_b%.6g_c%.6g_k%d_bt%d', cfg.rho, cfg.beta, cfg.c1, cfg.kmax, cfg.bt);
 
-%% ---------------- PHASE 2: REFINEMENT 1 (cheap) ----------------
-fprintf('\n=== PHASE 2: REFINEMENT 1 ===\n');
-dims_ref_1 = 1e3;       % cheap dimension
-n_starts_2 = 30;
-refined_1 = struct();
-r_id = 0;
+% mark initial as seen? no, we allow them to be tested once only
+% main loop: process queue until empty (STEP 3)
+fprintf('\n=== REFINEMENT 1: adaptive queue processing ===\n');
+while qhead <= numel(queue)
+    cfg = queue{qhead};
+    qhead = qhead + 1; % pop front
+    key = make_key(cfg);
+    if tested_keys.isKey(key)
+        % already tested identical config -> skip
+        fprintf('skip (already tested): rho=%g beta=%g c1=%.0e kmax=%d bt=%d\n', ...
+            cfg.rho, cfg.beta, cfg.c1, cfg.kmax, cfg.bt);
+        continue;
+    end
 
-% loss weights
-w_t  = 1;        % tempo domina
-w_g  = 10;       % fortissima penalizzazione se non sei a tol
-w_k  = 0.1;      % regolarizzazione debole
-w_bt = 0.1;      % misura di instabilità, non costo
+    % test this configuration on n_ref1 with n_starts_ref1 starts
+    fprintf('\nTesting config: rho=%g beta=%g c1=%.0e kmax=%d bt=%d\n', ...
+        cfg.rho, cfg.beta, cfg.c1, cfg.kmax, cfg.bt);
 
+    % generate starting points
+    x0_base = xbar_gen(n_ref1);
+    x0_rand = (x0_base - 1) + 2*rand(n_ref1, n_starts_ref1-1);
+    all_x0 = [x0_base, x0_rand];
 
-for i = 1:size(candidates,1)
-    gamma = candidates(i,1);
-    rho   = candidates(i,2);
-    btmax = candidates(i,3);
-    kmax  = candidates(i,4);
-
-    beta = gamma * dims_ref_1;
-    success = true;
-    fail_reason = '';
-
-    % configuration loss = worst run
-    L_cfg = -Inf;
-
-    % Generate starting points
-    x0_base = xbar_gen(dims_ref_1);
-    x0_rand = (x0_base-1) + 2*rand(dims_ref_1, n_starts_2-1);
-    all_x0  = [x0_base, x0_rand];
+    % result tracking per start
+    runs_success = true;
+    any_bt_reached = false;
+    any_k_reached = false;
+    structural_fail = false;
 
     for s = 1:size(all_x0,2)
-        tic
+       
         [~, ~, gnorm, k, ~, btseq] = modified_newton_method( ...
             all_x0(:,s), f, gradf, hessf, ...
-            kmax, tolgrad, c1, rho, btmax, beta);
-        t_run=toc;
+            cfg.kmax, tolgrad, cfg.c1, cfg.rho, cfg.bt, cfg.beta);
 
-        if abs(gnorm -tolgrad)>1e-6
-            success = false;
-            fail_reason = 'grad_norm_high';
-            break;
+
+        bt_reached = (~isempty(btseq) && btseq(end) >= cfg.bt);
+        k_reached  = (k >= cfg.kmax);
+
+        % interpret outcome with robust logic
+            % converged to tolerance
+        if bt_reached
+            % converged but with bt equal to bt budget? still note it
+            any_bt_reached = true;
+            runs_success = false;
         end
-        if k >= kmax
-            success = false;
-            fail_reason = sprintf('max_iter, start=%d', s);
-            break;
+        if k_reached
+            any_k_reached = true;
+            runs_success = false;
+
         end
+        % success for this start
+        
+    end % starts loop
 
-        phi     = max(0, log10(gnorm / tolgrad));
-        k_norm  = k / kmax;        
-        %bt_norm = sum(btseq) / (k * btmax);
-        bt_norm = sum(btseq);
-        L_run = w_t*t_run + w_g*phi + w_k*k_norm ;%+ w_bt*bt_mean;
-        L_cfg = max(L_cfg, L_run);
+    % mark as tested
+    tested_keys(key) = true;
 
+    if runs_success
+        % all starts succeeded -> accept configuration
+        outcfg = cfg;
+        outcfg.note = 'passed_ref1';
+        good_configs = [good_configs; outcfg]; %#ok<AGROW>
+        fprintf('  -> accepted (passed all %d starts)\n', size(all_x0,2));
+        continue;
     end
 
-    r_id = r_id + 1;
-    refined_1(r_id).gamma = gamma;
-    refined_1(r_id).rho   = rho;
-    refined_1(r_id).btmax = btmax;
-    refined_1(r_id).kmax  = kmax;
-    refined_1(r_id).success = success;
-    refined_1(r_id).fail_reason = fail_reason;
-
-    if success
-        refined_1(r_id).loss = L_cfg;
-        fprintf('  kept: gamma=%g rho=%g btmax=%d kmax=%d | loss=%.4f\n', ...
-            gamma, rho, btmax, kmax, L_cfg);
-    else
-        refined_1(r_id).loss = Inf;
-        fprintf('  discarded: gamma=%g rho=%g btmax=%d kmax=%d | reason: %s\n', ...
-            gamma, rho, btmax, kmax, fail_reason);
+    % if here, some runs failed but not structural. Apply escalation rules.
+    % Priority order: try increasing bt (if saturated), then try c1 fallback, then increase k.
+    % 1) If any_bt_reached and there is a larger bt level, enqueue with larger bt.
+    if any_bt_reached
+        idx = find(bt_levels > cfg.bt, 1, 'first');
+        if ~isempty(idx)
+            newcfg = cfg;
+            newcfg.bt = bt_levels(idx);
+            newkey = make_key(newcfg);
+            if ~tested_keys.isKey(newkey)
+                queue{end+1} = newcfg;
+                fprintf('  -> enqueued bt escalation: new bt=%d\n', newcfg.bt);
+            else
+                fprintf('  -> bt escalation candidate already tested: bt=%d\n', newcfg.bt);
+            end
+        end
+        % also enqueue c1 fallback only if current c1 is the small baseline
+        if cfg.c1 == c1_baseline
+            newcfg2 = cfg;
+            newcfg2.c1 = c1_levels(end); % c1_large
+            newkey2 = make_key(newcfg2);
+            if ~tested_keys.isKey(newkey2)
+                queue{end+1} = newcfg2;
+                fprintf('  -> enqueued c1 fallback: c1=%.0e\n', newcfg2.c1);
+            else
+                fprintf('  -> c1 fallback already tested\n');
+            end
+        end
+        % continue to next queue entry (do not immediately escalate k here)
+        continue;
     end
+
+    % 2) If any_k_reached (and not bt-saturated), try increasing kmax
+    if any_k_reached
+        idxk = find(kmax_levels > cfg.kmax, 1, 'first');
+        if ~isempty(idxk)
+            newcfg = cfg;
+            newcfg.kmax = kmax_levels(idxk);
+            newkey = make_key(newcfg);
+            if ~tested_keys.isKey(newkey)
+                queue{end+1} = newcfg;
+                fprintf('  -> enqueued kmax escalation: new kmax=%d\n', newcfg.kmax);
+            else
+                fprintf('  -> kmax escalation candidate already tested: kmax=%d\n', newcfg.kmax);
+            end
+        else
+            fprintf('  -> kmax saturated (no larger level available), discarding\n');
+        end
+        continue;
+    end
+
+    % fallback safety: if nothing matched, discard
+    fprintf('  -> fallback: discarded (no escalation rule applied)\n');
+end % queue processing
+
+fprintf('\nRefinement 1 complete. Good configs found: %d\n', numel(good_configs));
+
+% remove duplicate good configs (same rho,beta,c1,kmax,bt)
+if ~isempty(good_configs)
+    keys_good = arrayfun(@(c) make_key(c), good_configs, 'UniformOutput', false);
+    [~, ia] = unique(keys_good, 'stable');
+    good_configs = good_configs(ia);
+    fprintf('After deduplication good configs: %d\n', numel(good_configs));
 end
 
+% print all tested configurations (for transparency)
+fprintf('\n--- Tested configurations (summary) ---\n');
+tested_keys_list = keys(tested_keys);
+for i = 1:numel(tested_keys_list)
+    fprintf('%s\n', tested_keys_list{i});
+end
 
+% ---------------- REFINEMENT 2: robust evaluation and loss (STEP 4) ----------------
+fprintf('\n=== REFINEMENT 2: robust evaluation (n = 1e3, 1e4; 10 starts each) ===\n');
+n_ref2 = [1e3, 1e4];
+n_starts_ref2 = 15;
 
-gamma_vals = [refined_1.gamma];
-rho_vals   = [refined_1.rho];
-btmax_vals = [refined_1.btmax];
-kmax_vals  = [refined_1.kmax];
-loss_vals  = [refined_1.loss];
-
-valid = isfinite(loss_vals);
-gamma_vals = gamma_vals(valid);
-rho_vals   = rho_vals(valid);
-btmax_vals = btmax_vals(valid);
-loss_vals  = loss_vals(valid);
-
-figure;
-scatter(gamma_vals, rho_vals, 60, log10(loss_vals), 'filled');
-set(gca,'XScale','log');
-colorbar;
-xlabel('\gamma');
-ylabel('\rho');
-title('Configurazioni: colore = log_{10}(loss)');
-grid on;
-
-figure;
-scatter(rho_vals, btmax_vals, 60, log10(loss_vals), 'filled');
-colorbar;
-xlabel('\rho');
-ylabel('btmax');
-title('Backtracking vs rho (log-loss)');
-grid on;
-
-
-figure;
-scatter(gamma_vals, btmax_vals, 60, log10(loss_vals), 'filled');
-set(gca,'XScale','log');
-colorbar;
-xlabel('\gamma');
-ylabel('btmax');
-title('\gamma vs btmax (log-loss)');
-grid on;
-
-
-thr = prctile(loss_vals,10);
-hold on;
-idx = loss_vals <= thr;
-scatter(gamma_vals(idx), rho_vals(idx), 80, 'k', 'LineWidth', 1.5);
-
-
-
-
-%% ---------------- PHASE 3: REFINEMENT 2 (deep, two dimensions) ----------------
-fprintf('\n=== PHASE 3: REFINEMENT 2 ===\n');
-dims_ref_2 = [1e3, 1e4];   % two dimensions
-refined_2 = struct();
-r_id = 0;
-
-% Select promising configurations from refinement 1 (top 10% lowest loss)
-losses_1 = [refined_1.loss];
-promising_idx = find(losses_1 < prctile(losses_1, 10));
-
-for i = promising_idx
-    cfg = refined_1(i);
-    gamma = cfg.gamma;
-    rho   = cfg.rho;
-    btmax = cfg.btmax;
-    kmax  = cfg.kmax;
-
-    success = true;
-    fail_reason = '';
+refined = []; % store results with loss
+for i = 1:numel(good_configs)
+    cfg = good_configs(i);
     L_cfg = -Inf;
+    success_cfg = true;
 
-    for n = dims_ref_2
-        beta = gamma * n;
+    fprintf('\nEvaluating config #%d: rho=%g beta=%g c1=%.0e kmax=%d bt=%d\n', ...
+        i, cfg.rho, cfg.beta, cfg.c1, cfg.kmax, cfg.bt);
 
-        % Generate starting points
+    for n = n_ref2
+        % generate starts
         x0_base = xbar_gen(n);
-        x0_rand = (x0_base-1) + 2*rand(n, 10-1);
-        all_x0  = [x0_base, x0_rand];
+        x0_rand = (x0_base - 1) + 2*rand(n, n_starts_ref2-1);
+        all_x0 = [x0_base, x0_rand];
 
         for s = 1:size(all_x0,2)
+            
             tic;
             [~, ~, gnorm, k, ~, btseq] = modified_newton_method( ...
                 all_x0(:,s), f, gradf, hessf, ...
-                kmax, tolgrad, c1, rho, btmax, beta);
+                cfg.kmax, tolgrad, cfg.c1, cfg.rho, cfg.bt, cfg.beta);
             t_run = toc;
 
-            if gnorm > tolgrad
-                success = false;
-                fail_reason = sprintf('grad_norm_high at n=%d, start=%d', n, s);
-                break;
-            end
-            if k >= kmax
-                success = false;
-                fail_reason = sprintf('max_iter at n=%d, start=%d', n, s);
+            if gnorm > tolgrad || k >= cfg.kmax || (~isempty(btseq) && btseq(end) >= cfg.bt)
+                % if any run fails at this stage, mark config as failed in robustness
+                fprintf('  run failed at n=%d start=%d: gnorm=%.2e k=%d bt_last=%d\n', ...
+                    n, s, gnorm, k, (isempty(btseq) * 0) + (~isempty(btseq)*btseq(end)));
+                success_cfg = false;
                 break;
             end
 
-            phi     = max(0, log10(gnorm / tolgrad));
-            k_norm  = k / kmax;
-            bt_mean = sum(btseq) / max(k,1);
-            
-            L_run = w_t*t_run + w_g*phi + w_k*k_norm ;%+ w_bt*bt_mean;
+            phi = max(0, log10(gnorm / tolgrad));
+            L_run = w_t * t_run + w_g * phi;
             L_cfg = max(L_cfg, L_run);
-
         end
-
-        if ~success
-            break;
-        end
+        if ~success_cfg, break; end
     end
 
-    r_id = r_id + 1;
-    refined_2(r_id).gamma = gamma;
-    refined_2(r_id).rho   = rho;
-    refined_2(r_id).btmax = btmax;
-    refined_2(r_id).kmax  = kmax;
-    refined_2(r_id).success = success;
-    refined_2(r_id).fail_reason = fail_reason;
-
-    if success
-        refined_2(r_id).loss = L_cfg;
-        fprintf('  kept: gamma=%g rho=%g btmax=%d kmax=%d | loss=%.4f\n', ...
-            gamma, rho, btmax, kmax, L_cfg);
+    if success_cfg
+        r = struct();
+        r.beta = cfg.beta;
+        r.rho  = cfg.rho;
+        r.c1   = cfg.c1;
+        r.kmax = cfg.kmax;
+        r.bt   = cfg.bt;
+        r.loss = L_cfg;
+        refined = [refined; r]; %#ok<AGROW>
+        fprintf('  kept in REF2: loss=%.4e\n', L_cfg);
     else
-        refined_2(r_id).loss = Inf;
-        fprintf('  discarded: gamma=%g rho=%g btmax=%d kmax=%d | reason: %s\n', ...
-            gamma, rho, btmax, kmax, fail_reason);
+        fprintf('  discarded in REF2 (not robust)\n');
     end
 end
 
+% if none survived
+if isempty(refined)
+    error('No configuration survived refinement 2.');
+end
 
-%% ---------------- PHASE 4: FINAL SELECTION ----------------
-fprintf('\n=== PHASE 4: FINAL SELECTION ===\n');
-losses_final = [refined_2.loss];
-[~, best_idx] = min(losses_final);
-best = refined_2(best_idx);
+% deduplicate refined (defensive)
+keys_ref = arrayfun(@(c) sprintf('r%.6g_b%.6g_c%.6g_k%d_bt%d', c.rho, c.beta, c.c1, c.kmax, c.bt), refined, 'UniformOutput', false);
+[~, ia_ref] = unique(keys_ref, 'stable');
+refined = refined(ia_ref);
 
-fprintf('\nBEST CONFIGURATION FOUND:\n');
-fprintf(' gamma  = %.1e\n', best.gamma);
-fprintf(' rho    = %.2f\n', best.rho);
-fprintf(' btmax  = %d\n', best.btmax);
-fprintf(' kmax   = %d\n', best.kmax);
-fprintf(' loss   = %.4f\n', best.loss);
+% ---------------- STEP 5: select top 10% and plot ----------------
+losses = [refined.loss];
+pct = 10;
+thr = prctile(losses, pct);
+best_idx = find(losses <= thr);
+best = refined(best_idx);
+
+fprintf('\n=== FINAL SELECTION: top %d%% (<= percentile %.2g) ===\n', pct, thr);
+for i = 1:numel(best)
+    fprintf('%d) beta=%.6g rho=%.6g c1=%.0e kmax=%d bt=%d loss=%.4e\n', ...
+        i, best(i).beta, best(i).rho, best(i).c1, best(i).kmax, best(i).bt, best(i).loss);
+end
+
+% plots: few useful scatter plots (color = log10(loss))
+beta_vals  = [refined.beta];
+rho_vals   = [refined.rho];
+bt_vals    = [refined.bt];
+kmax_vals  = [refined.kmax];
+loss_vals  = [refined.loss];
+
+figure;
+scatter(beta_vals, rho_vals, 80, log10(loss_vals), 'filled');
+set(gca,'XScale','log');
+colorbar;
+xlabel('\beta'); ylabel('\rho');
+title('All refined configs: color = log_{10}(loss)');
+grid on;
+
+figure;
+scatter(bt_vals, rho_vals, 80, log10(loss_vals), 'filled');
+colorbar;
+xlabel('bt'); ylabel('\rho');
+title('bt vs rho (log_{10} loss)');
+grid on;
+
+figure;
+scatter(beta_vals, bt_vals, 80, log10(loss_vals), 'filled');
+set(gca,'XScale','log');
+colorbar;
+xlabel('\beta'); ylabel('bt');
+title('\beta vs bt (log_{10} loss)');
+grid on;
+
+% highlight best configs on first plot
+hold on;
+best_keys = arrayfun(@(c) sprintf('r%.6g_b%.6g_c%.6g_k%d_bt%d', c.rho, c.beta, c.c1, c.kmax, c.bt), best, 'UniformOutput', false);
+for i = 1:numel(best)
+    scatter(best(i).beta, best(i).rho, 150, 'k', 'LineWidth', 1.5);
+end
+hold off;
+
+fprintf('\nScript finished. Summary: initial configs=%d, good after ref1=%d, refined after ref2=%d, final selected=%d\n', ...
+    3*numel(beta_levels), numel(good_configs), numel(refined), numel(best));
