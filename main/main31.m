@@ -9,7 +9,7 @@ addpath(genpath(pwd))
 [f, gradf, hessf, xbar_gen] = problem_broyden31();
 
 % Parameters definition
-dimensions = [2, 10^3, 10^4, 10^5]; 
+dimensions = [2, 10^3]%, 10^4, 10^5]; 
 kmax = 50;
 tolgrad = 1e-6;
 c1 = 1e-3;      % Standard Armijo parameter
