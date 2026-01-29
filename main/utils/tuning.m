@@ -5,7 +5,7 @@ addpath(genpath("C:\Users\Utente\Desktop\Corsi\Numerical optimization for large 
 rng(346710);
 
 % ---------------- Problem ----------------
-[f, gradf, hessf, xbar_gen] = problem_broyden31();
+[f, gradf, hessf, xbar_gen] = problem_trig16();
 
 % ---------------- Experiment settings (STEP 1) ----------------
 tolgrad   = 1e-6;        % fixed experimenter choice

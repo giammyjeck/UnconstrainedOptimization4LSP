@@ -1,4 +1,4 @@
-function [f,gradf,hessf,xbar] = problem_trig16()
+function [f,gradf,hessf,xbar, tfun] = problem_trig16()
 % ------------------------------------------------------------
 % Problem 16: Banded Trigonometric
 %
@@ -14,10 +14,21 @@ function [f,gradf,hessf,xbar] = problem_trig16()
 f     = @Ffun;
 gradf = @gfun;
 hessf = @Hfun;
+tfun  = @rvec;
 
-% Required starting point:
-%   x_i = 1  for all i
 xbar = @(n) ones(n,1);
+
+    function r = rvec(x)
+            % r_i(x) = i[(1-cos x_i) + sin x_{i-1} - sin x_{i+1}], con x0=x_{n+1}=0
+            x = x(:);
+            n = length(x);
+            i = (1:n)';
+    
+            xm1 = [0; x(1:n-1)];
+            xp1 = [x(2:n); 0];
+    
+            r = i .* ((1 - cos(x)) + sin(xm1) - sin(xp1));
+    end
 
     function Fx = Ffun(x)
         n = length(x);

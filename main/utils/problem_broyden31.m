@@ -1,4 +1,4 @@
-function [f,gradf,hessf,xbar] = problem_broyden31()
+function [f,gradf,hessf,xbar, rfun] = problem_broyden31()
 % ------------------------------------------------------------
 % Problem 31: Broyden tridiagonal least–squares problem
 %
@@ -20,6 +20,7 @@ function [f,gradf,hessf,xbar] = problem_broyden31()
 f     = @Ffun;
 gradf = @gfun;
 hessf = @Hfun;
+rfun = @rvec;
 
 % Required starting point:
 %   xbar_k = -1  for all k
