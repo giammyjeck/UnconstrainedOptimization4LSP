@@ -6,14 +6,14 @@ rng(seed);
 addpath(genpath(pwd))
 
 % Defining the problem
-[f, gradf, hessf, xbar_gen] = problem14();
+[f, gradf, hessf, xbar_gen] = problem_trig16();
 
 % Parameters definition
-dimensions = [2, 10^3, 10^4 ];%, 10^5]; 
-kmax = 200;
+dimensions = [2, 10^3, 10^4 , 10^5]; 
+kmax = 50;
 tolgrad = 1e-6;
-c1 = 1e-4;      % Standard Armijo parameter
-rho = 0.8;      % Backtracking contraction factor
+c1 = 1e-3;      % Standard Armijo parameter
+rho = 0.5;      % Backtracking contraction factor
 btmax = 20;
 max_cg = 1000;   % Max inner iterations for the conjugate gradient solving method in the truncated one
 beta = 1e-2;

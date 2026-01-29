@@ -62,7 +62,7 @@ function [xk,fk,gradfk_norm,k,xseq,btseq,pks,inner_iters] = truncated_newton_met
         p_tn = ck; 
 
         
-        eta_k = min(0.5, sqrt(gradfk_norm));
+        eta_k = min(1e-7, sqrt(gradfk_norm));
 
         rk = ck - Bk * z; % Residual of the system, at the first iteration z = 0 so rk = ck.
         rk_old = rk'*rk;
