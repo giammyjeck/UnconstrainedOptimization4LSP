@@ -77,7 +77,7 @@ function [xk,fk,gradfk_norm,k,xseq,btseq,pks,inner_iters] = truncated_newton_met
             curv = dk'*Bdk;
             
             %if curv > 0 % If the curvature is positive we can proceed with CG method.
-            if curv <= 1e-10
+            if curv <= 1e-12
                 
                 if j == 0
                     p_tn = -gradfk;
