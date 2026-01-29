@@ -1,7 +1,4 @@
-%% ============================================================
-%% ADAPTIVE TUNING (rho, beta) with adaptive kmax, btmax, conditional c1 fallback
-%% Implements the queue-based strategy you described
-%% ============================================================
+
 clear; clc; close all;
 addpath(genpath("C:\Users\Utente\Desktop\Corsi\Numerical optimization for large scale problems and Stochastic Optimization\NumericalO4LSP\main"));
 
@@ -25,11 +22,11 @@ bt_baseline  = 1;
 
 % allowable escalation levels (kept aside)
 c1_levels = [1e-4, 1e-3];
-kmax_levels = [10,50, 100, 200];
+kmax_levels = [10,20,50, 100, 200];
 bt_levels = [1, 5, 10, 20];
 
 % runtime sampling for refinement 1
-n_ref1 = 1e3;
+n_ref1 = 1e4;
 n_starts_ref1 = 15;
 
 % Loss weights (used in ref2 / final)
@@ -222,11 +219,15 @@ for i = 1:numel(good_configs)
 
         for s = 1:size(all_x0,2)
             
-            tic;
-            [~, ~, gnorm, k, ~, btseq] = modified_newton_method( ...
-                all_x0(:,s), f, gradf, hessf, ...
-                cfg.kmax, tolgrad, cfg.c1, cfg.rho, cfg.bt, cfg.beta);
-            t_run = toc;
+            for r = 1:3
+                tic;
+                [~, ~, gnorm, k, ~, btseq] = modified_newton_method( ...
+                    all_x0(:,s), f, gradf, hessf, ...
+                    cfg.kmax, tolgrad, cfg.c1, cfg.rho, cfg.bt, cfg.beta);
+                t(r) = toc;
+            end
+            t_run = median(t);
+
 
             if gnorm > tolgrad && (k >= cfg.kmax || (~isempty(btseq) && btseq(end) >= cfg.bt))
                 % if any run fails at this stage, mark config as failed in robustness
