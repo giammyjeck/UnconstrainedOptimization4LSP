@@ -228,7 +228,7 @@ for i = 1:numel(good_configs)
                 cfg.kmax, tolgrad, cfg.c1, cfg.rho, cfg.bt, cfg.beta);
             t_run = toc;
 
-            if gnorm > tolgrad && (k >= cfg.kmax || (~isempty(btseq) && btseq(end) >= cfg.bt))
+            if gnorm > tolgrad || k >= cfg.kmax || (~isempty(btseq) && btseq(end) >= cfg.bt)
                 % if any run fails at this stage, mark config as failed in robustness
                 fprintf('  run failed at n=%d start=%d: gnorm=%.2e k=%d bt_last=%d\n', ...
                     n, s, gnorm, k, (isempty(btseq) * 0) + (~isempty(btseq)*btseq(end)));
@@ -262,6 +262,7 @@ end
 if isempty(refined)
     error('No configuration survived refinement 2.');
 end
+
 
 
 % ---------------- STEP 5: select top 10% and plot ----------------
