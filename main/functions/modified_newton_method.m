@@ -147,7 +147,7 @@ while k < kmax && gradfk_norm >= tolgrad
     % we must try to improve it.
     for j = 1:maxit
 
-            if n > 1e-4
+            if n >= 1e-4
                 Bk = Hk+tauk(j)*speye(n); 
             else
                 Bk = Hk+tauk(j)*eye(n); 

@@ -20,11 +20,11 @@ for s = 1:num_pts
 
     tic;
     try
-        %[~,fk,gn,it,xseq] = truncated_newton_method(x0,f,gradf,hessf,kmax, ...
-        %    tolgrad,c1,rho,btmax,max_cg) ;
+        [~,fk,gn,it, xseq] = truncated_newton_method(x0,f,gradf,hessf,kmax, ...
+            tolgrad,c1,rho,btmax,max_cg) ;
 
-         [~,fk, gn, it, xseq] = modified_newton_method(x0, f, gradf, hessf, ...
-            kmax, tolgrad, c1, rho, btmax, beta);
+         % [~,fk, gn, it, xseq] = modified_newton_method(x0, f, gradf, hessf, ...
+          %  kmax, tolgrad, c1, rho, btmax, beta);
     catch
         % se qualcosa va storto, marchiamo fail
         fk = NaN; gn = Inf; it = 0;

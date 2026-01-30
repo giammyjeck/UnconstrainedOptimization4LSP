@@ -27,17 +27,22 @@ n_list  = [2, 1e3, 1e4, 1e5];
 k_list  = [4, 8, 12];
 modes   = ["h","hi"];      % h: 10^-k ; hi: 10^-k * max(|x_i|,1)
 
-% Parametri Modified Newton
-kmax    = 50;
+% --- parametri Modified Newton ---
+kmax    = 20;
 tolgrad = 1e-6;
 c1      = 1e-4;
-rho     = 0.3;
-btmax   = 10;
-beta    = 1e-2;
+rho     = 0.5;
+btmax   = 5;
+beta    = 1e-3;
+%max_cg   = 5;
 
-% Problemi
-probs  = {@problem_trig16, @problem_broyden31};
-pnames = ["problem_trig16","problem_broyden31"];
+% --- problemi ---
+probs  = {@problem_broyden31};
+pnames = ["problem_broyden31"];
+
+%probs  = {@problem_trig16};
+%pnames = ["problem_trig16"];
+
 
 outdir = "out_task3_case2_success";
 if ~exist(outdir,"dir"), mkdir(outdir); end
@@ -77,6 +82,7 @@ for p = 1:numel(probs)
             kmax, tolgrad, c1, rho, btmax, beta);
         results.(pname).(dim_field).exact = res_exact;
 
+
         % =========================
         % CASE 2: grad FD + Hess numerica
         % =========================
@@ -89,7 +95,7 @@ for p = 1:numel(probs)
 
                 fprintf("  %s:\n", tag);
 
-                if pname == "problem16_Trig"
+                if pname == "problem_trig16"
                     % Nel tuo setup, rfun per Trig è la tfun (contribuzioni separabili)
                     tfun   = rfun;
 

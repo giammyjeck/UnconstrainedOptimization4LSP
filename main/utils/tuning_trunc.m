@@ -22,15 +22,15 @@ max_cg_baseline = 2;
 % escalation levels (kept aside, attivati on-demand)
 c1_levels   = [1e-4, 1e-3];
 kmax_levels = [10, 20, 50, 100, 200];%, 2000, 5000];
-bt_levels   = [1, 5, 10, 20, 30];
-max_cg_levels = [5, 10, 1e3, 1e4];
+bt_levels   = [1, 5, 10, 20, 30, 40];
+max_cg_levels = [5, 10, 1e3, 1e4, 1e5];
 
 % runtime sampling for refinement stages
 n_ref1 = 1e4;
 n_starts_ref1 = 5;   % cheap screening
 
 n_ref2 = [1e3, 1e4];
-n_starts_ref2 = 10;  % robust evaluation
+n_starts_ref2 = 5;  % robust evaluation
 
 % loss weights
 w_t = 1;

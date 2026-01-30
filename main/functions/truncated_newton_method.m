@@ -118,10 +118,11 @@ pks         = zeros(length(x0), kmax);
 inner_iters = zeros(1, kmax); 
 
 
-% k = 1;
-k = 0;
+k = 1;
+%k = 0;
+i = 0;
 while k <= kmax && gradfk_norm >= tolgrad
-
+    i= i+1;
 
     % The system we need to solve is Hess(fk)*pk = -graf(fk) <-> Hk*z=ck
     z = zeros(length(x0),1); 
@@ -150,7 +151,7 @@ while k <= kmax && gradfk_norm >= tolgrad
         curv = dk'*Hdk;
         
         %if curv > 0 % If the curvature is positive we can proceed with CG method.
-        if curv <= 1e-10
+        if curv <= 1e-12
             
             if j == 0
                 p_tn = -gradfk;

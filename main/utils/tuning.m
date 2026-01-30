@@ -5,7 +5,7 @@ addpath(genpath("C:\Users\Utente\Desktop\Corsi\Numerical optimization for large 
 rng(346710);
 
 % ---------------- Problem ----------------
-[f, gradf, hessf, xbar_gen] = problem_trig16();
+[f, gradf, hessf, xbar_gen, rfun] = problem_trig16();
 
 % ---------------- Experiment settings (STEP 1) ----------------
 tolgrad   = 1e-6;        % fixed experimenter choice
@@ -23,7 +23,7 @@ bt_baseline  = 1;
 % allowable escalation levels (kept aside)
 c1_levels = [1e-4, 1e-3];
 kmax_levels = [10,20,50, 100, 200];
-bt_levels = [1, 5, 10, 20];
+bt_levels = [1, 5, 10, 20, 30, 40];
 
 % runtime sampling for refinement 1
 n_ref1 = 1e4;

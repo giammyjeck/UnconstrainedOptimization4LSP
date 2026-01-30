@@ -28,19 +28,23 @@ modes   = ["h","hi"];      % h: 10^-k ; hi: 10^-k * max(|x_i|,1)
 % --- parametri Modified Newton ---
 kmax    = 50;
 tolgrad = 1e-6;
-c1      = 1e-4;
-rho     = 0.3;
-btmax   = 10;
-beta    = 1e-2;
+c1      = 1e-3;
+rho     = 0.8;
+btmax   = 40;
+%beta    = 1e-3;
+max_cg   = 1000;
 
 % --- problemi ---
-probs  = {@problem_trig16, @problem_broyden31};
-pnames = ["problem_trig16","problem_broyden31"];
+%probs  = {@problem_broyden31};
+%pnames = ["problem_broyden31"];
+
+probs  = {@problem_trig16};
+pnames = ["problem_trig16"];
 
 % half-bandwidth Hessiana (per FD banded)
-bwH = [0, 2];
+bwH = [0]; % 16
+%bwH = 2 % 31
 
-% 0 ho solo la diagonale, 1 è tridiagonale  e 3 è tridiagonale 
 
 % --- output ---
 outdir = "out_task3_case1_success";
@@ -82,7 +86,7 @@ for p = 1:numel(probs)
         % =========================
         fprintf("  BASELINE (exact):\n");
         res_exact = run_6starts_success(store, X0, f, grad_exact, hess_exact, ...
-            kmax, tolgrad, c1, rho, btmax, beta);
+            kmax, tolgrad, c1, rho, btmax, max_cg);
         results.(pname).(dim_field).exact = res_exact;
 
         % =========================
@@ -101,7 +105,7 @@ for p = 1:numel(probs)
                 Hfd = @(x) hess_fd_from_grad_banded(grad_exact, x, kfd, mode, bw);
 
                 res = run_6starts_success(store, X0, f, grad_exact, Hfd, ...
-                    kmax, tolgrad, c1, rho, btmax, beta);
+                    kmax, tolgrad, c1, rho, btmax, max_cg);
 
                 results.(pname).(dim_field).(tag) = res;
             end
