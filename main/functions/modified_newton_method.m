@@ -23,16 +23,15 @@ function [xk,fk,gradfk_norm,k,xseq,btseq,alphas,gradfk_seq,fk_seq,tau_new,pks] =
 %   xseq     : sequence of iterates [x0, x1, ..., xk]  (n × (k+1))
 %   btseq    : number of backtracking steps at each iteration (1 × k)
 %   tau_new  : (maxit+1) × k matrix storing the tau values used at each iteration
-%   alphas   : accepted step lengths
+%   alphas   : step lengths
 %   pks      : search directions
 
 
 % INPUT CHECKS
-
 if ~isnumeric(x0) || ~isvector(x0)
     error('x0 must be a numeric column vector.');
 end
-xk = x0(:); % force column vector
+xk = x0(:); % Forcing column vector.
 n = length(xk);
 
 if ~isa(f,'function_handle')
@@ -106,11 +105,11 @@ farmijo = @(fk, alpha, c1_gradfk_pk) ...
     fk + alpha * c1_gradfk_pk;
 
 
-% Inner parameters
-tol = 1e-6;     % tol to check the positivness of Hk diagonal
-maxit = 200;    % max number of iteration to check the positivness of Hk diagonal
+% Inner parameters.
+tol = 1e-6;     % Tolerance to check the positivness of Hk diagonal.
+maxit = 200;    % Max number of iteration to check the positivness of Hk diagonal.
 
-% preallocations
+% Preallocations.
 xseq =          zeros(length(x0), kmax); 
 btseq =         zeros(1, kmax);         
 alphas =        zeros(1, kmax);
@@ -123,20 +122,20 @@ tau_new =       zeros(maxit+1,kmax);
 k = 0;
 while k < kmax && gradfk_norm >= tolgrad
     
-    % Compute the hessian matrix
+    % Compute the hessian matrix.
     Hk = hessf(xk);
     
-    % Check if the hessian matrix is positive definite
+    % Check if the hessian matrix is positive definite.
     diagHk = full(diag(Hk));
     isPositive = all(diagHk>tol);
 
     if isPositive == true
-        tau_k = 0; % No need to add a correctional term 
+        tau_k = 0; % No need to add a correction term 
     else
-        tau_k = beta-min(diagHk);
+        tau_k = beta-min(diagHk); 
     end
     
-    % Vector to store the history of correction term per iteration
+    % Vector to store the history of the correction term per iteration.
     tauk = zeros(maxit+1,1); 
     tauk(1)= tau_k;
 
@@ -144,7 +143,8 @@ while k < kmax && gradfk_norm >= tolgrad
     % can be built.
     % In order to check if the corrected matrix is positive definite, we 
     % attempt to perform the incomplete choleski factorization: 
-    % if Bk is not positive definite, then you get an error and try to improve it.
+    % if Bk is not positive definite, then we get an error and consequently
+    % we must try to improve it.
     for j = 1:maxit
 
             if n > 1e-4
@@ -152,10 +152,12 @@ while k < kmax && gradfk_norm >= tolgrad
             else
                 Bk = Hk+tauk(j)*eye(n); 
             end
-
+            
+            % Cholesky factorization.
             [R,flag] = chol(Bk);
 
-            % Chech if the correction is good enough (Is Bk positive definite?)
+            % Chech if the correction is good enough (Is Bk positive
+            % definite?).
             if flag == 0
                 %fprintf('Bk is positive definite k: %d iteration j: %d\n', k, j);
                 break
@@ -166,31 +168,30 @@ while k < kmax && gradfk_norm >= tolgrad
             end
     end
 
-    % Once we obtain a matrix Bk which is positive definite we can solve the
-    % following system with a direct solver 
+    % Once we obtain a matrix Bk which is positive definite we solve the
+    % following system with a direct solver.
     pk = R\(R'\(-gradfk));
     
 
-    % Armijo Backtracking 
+
+    % BACKTRACKING.
     
-    alpha = 1; % Reset the value of alpha (parameter used for linesearch)
-    xnew = xk + alpha * pk;    % Compute the candidate new xk
+    alpha = 1; % Reset the value of alpha (parameter used for linesearch).
+    xnew = xk + alpha * pk;   % Computing the candidate solution at step k.
     fnew = f(xnew);
     c1_gradfk_pk = c1 * gradfk' * pk;
     bt = 0;
 
     while bt < btmax && fnew > farmijo(fk, alpha, c1_gradfk_pk) 
 
-        alpha = rho * alpha;  % alpha reduction  
-
+        alpha = rho * alpha;  % Alpha reduction. 
         xnew = xk + alpha * pk; 
         fnew = f(xnew);
-    
         bt = bt + 1;
     end
 
 
-    % Check if the maximum number of backtracking iterations is reached
+    % Check if the maximum number of backtracking iterations is reached.
     if bt == btmax && fnew > farmijo(fk, alpha, c1_gradfk_pk)
         disp('Maximum backtracking iterations reached, stopping.');
         k = k+1;
@@ -204,7 +205,7 @@ while k < kmax && gradfk_norm >= tolgrad
         break;
     end
     
-    % Update xk, fk, gradfk_norm
+    % Update xk, fk, gradfk_norm.
     xk = xnew;
     fk = fnew;
     gradfk = gradf(xk);
@@ -225,7 +226,7 @@ while k < kmax && gradfk_norm >= tolgrad
 end
 
 
-% Trim size
+% Trimming the final structures.
 xseq            = xseq(:, 1:k);
 btseq           = btseq(1:k);
 alphas          = alphas(1:k);
