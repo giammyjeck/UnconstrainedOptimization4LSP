@@ -196,11 +196,11 @@ while k < kmax && gradfk_norm >= tolgrad
         k = k+1;
         xseq(:, k)      = xk;
         btseq(k)        = bt;
-        tau_new(:, k)   = tauk; 
-        alphas(k)       = alpha;
-        pks(:, k)       = pk;
-        gradfk_seq(k)   = gradfk_norm;
-        fk_seq(k)       = fk;
+        tau_new(:, k)   = tauk; %Store current tauk values
+        alphas(k)    = alpha;
+        pks(:, k)    = pk;
+        gradfk_seq(k)    = gradfk_norm;
+        fk_seq(k)     = fk;
         break;
     end
     
@@ -211,29 +211,80 @@ while k < kmax && gradfk_norm >= tolgrad
     gradfk_norm = norm(gradfk);
     
 
-    k = k + 1; 
+    % Increase the step by one
+    k = k + 1; % !!! CONTROLLARE se è  più robusto incrementare dopo aver salvato
 
     % Storing
     xseq(:, k)      = xk;
     btseq(k)        = bt;
-    tau_new(:, k)   = tauk; 
-    alphas(k)       = alpha;
-    pks(:, k)       = pk;
-    gradfk_seq(k)   = gradfk_norm;
-    fk_seq(k)        = fk;
+    tau_new(:, k)   = tauk; %Store current tauk values
+    alphas(k)    = alpha;
+    pks(:, k)    = pk;
+    gradfk_seq(k)    = gradfk_norm;
+    fk_seq(k)     = fk;
 
 end
 
 
-% Trim size
-xseq            = xseq(:, 1:k);
-btseq           = btseq(1:k);
-alphas          = alphas(1:k);
-pks             = pks(:, 1:k);
-gradfk_seq      = gradfk_seq(1:k);
-fk_seq          = fk_seq(1:k);
+% "Cut" xseq and btseq to the correct size
+xseq   = xseq(:, 1:k);
+btseq  = btseq(1:k);
+alphas = alphas(1:k);
+pks    = pks(:, 1:k);
+gradfk_seq    = gradfk_seq(1:k);
+fk_seq     = fk_seq(1:k);
+
+% "Add" x0 at the beginning of xseq (otherwise the first el. is x1)
 xseq = [x0, xseq];
 
 
 end
 
+
+% TO DO:
+
+% INPUT
+%     : controllare e scrivere la dimensione e il tipo expected di ogni parametro
+%     : definire dei controlli di coerenza per i parametri in modo da 
+%       non andare a lavorare nell'ordine della precisione di macchina
+% DONE: aggiungere dei controlli generici sugli input
+%     : controllare sparsità dell'hessiana issparse(H)
+
+
+% ALTRO
+%     : (diagHk = diag(Hk); isPositive = all(diagHk>tol);) E' condizione necessaria ma non sufficiente! 
+%%% CONDIZIONE SUFFICIENTE dominanza diagonale (costo O(N^2))
+%%% Cerchi di gerghscorins
+%%% metodi di lanczos
+%       eventualmente provare altre condizioni Necessarie purché veloci da
+%       calcolare, poi nel report confrontiamo che succede
+%     : (tau_k = beta-min(diagHk);) controllare nella teoria se max(0,...)
+%     : (Bk = Hk+tauk(j)*eye(size(Hk));) dovremmo controllare che sia
+%       simemtrica prima di usare chol? cioè un controllo basic ulteriore? se non lo
+%       fosse ? continuiamo a migliorarla ? 
+%     : (tauk(j+1) = max(beta, 2*tauk(j))); quando aggiorniamo Bk
+%       correggendo il tauk, facciamo questa correzzione, ma perché ? controlalre teoria e
+%       eventualmente proporre altre soluzioni
+%     : pk è descent direction ? NOTE: there's no need to check if pk is a descent direction because
+%       of remark2 !!! CONTROLLARE SU TEORIA PERCHEé
+%     : linesearch !!! for teoretical properties you need alpha to be 1
+%     
+%     : aggiungere altri modi di calcolare la Bk guardando nel book di
+%       teoria
+
+%BACKTRACKING
+%
+%     : rho dalla teoria del backtracking sappiamo che può essere fisso o chosen
+%       by interpolation rho \in [\rho_l, \rho_u]
+%     : Controllare CON quale valore alpha viene soddisfatta armijo perché se alpha <<1
+%       abbiamo stagnation... 
+%     : ATTENZIONE: Non fare l'errore di permettere che alpha sia < eps, bisogna
+%       stare attenti a scegliere un rho e btmax che non permetta alpha<eps,
+%       NEPPURE TEORICAMENTE, cioè quando fissiamo i parametri cerchiamo delle
+%       condizioni che le legano... rho = 0.5 e btmax  = 50 è un errore
+%       GRAVESSSSSSSSSSSSSSSSSSSSSSSSSSSSSSS
+%       anche btmax = 30 nonè giusto perché vado lento
+%       con 50 backtracking e rho = 0.5 raggiungiamo eps... sbagliato
+%
+% working : AGGIUNGERE CONDIZIone di curvatura, MA soprattutto Ha senso
+%           farlo, se si , quando  
