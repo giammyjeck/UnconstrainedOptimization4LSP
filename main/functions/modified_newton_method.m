@@ -1,30 +1,31 @@
 function [xk,fk,gradfk_norm,k,xseq,btseq,alphas,gradfk_seq,fk_seq,tau_new,pks] = modified_newton_method(x0,f,gradf,hessf,kmax,tolgrad,c1,rho,btmax,beta)
 
 % MODIFIED_NEWTON_METHOD  Modified Newton method with Hessian correction
-% [xk, fk, gradfk_norm, k, xseq, btseq, tau_new,alphas,pks] = ...
-%     modified_newton_method(x0, f, gradf, hessf, kmax, tolgrad, c1, rho, btmax, beta)
 %
-%   This functions is aimed to solve large scale numerical optimization
-%   problems using the modified Newton method with backtracking techniques.
+%   [xk, fk, gradfk_norm, k, xseq, btseq, tau_new,alphas,pks] = ...
+%       modified_newton_method(x0, f, gradf, hessf, kmax, tolgrad, c1, rho, btmax, beta)
 %
-% INPUT:
-%   x0      : initial point (column vector)
-%   f       : function handle for the scalar objective function f(x)
-%   gradf   : function handle for the gradient gradf(x)
-%   hessf   : function handle for the Hessian hessf(x)
-%   kmax    : maximum number of iterations
-%   tolgrad : tolerance on the gradient norm for the stopping condition
-%   c1, rho, btmax : parameters for Armijo/backtracking (0 < c1 < 1, 0 < rho < 1)
-%   beta    : minimum initial increment for the Hessian correction (beta > 0)
+%       This functions is aimed to solve large scale numerical optimization
+%       problems using the modified Newton method with backtracking techniques.
 %
-% OUTPUT:
-%   xk, fk, gradfk_norm : final point, objective value, gradient norm at the solution
-%   k        : number of iterations performed
-%   xseq     : sequence of iterates [x0, x1, ..., xk]  (n × (k+1))
-%   btseq    : number of backtracking steps at each iteration (1 × k)
-%   tau_new  : (maxit+1) × k matrix storing the tau values used at each iteration
-%   alphas   : step lengths
-%   pks      : search directions
+%   INPUT ARGUMENTS:
+%       x0              : initial point (column vector)
+%       f               : function handle for the scalar objective function f(x)
+%       gradf           : function handle for the gradient gradf(x)
+%       hessf           : function handle for the Hessian hessf(x)
+%       kmax            : maximum number of iterations
+%       tolgrad         : tolerance on the gradient norm for the stopping condition
+%       c1, rho, btmax  : parameters for Armijo/backtracking (0 < c1 < 1, 0 < rho < 1)
+%       beta            : minimum initial increment for the Hessian correction (beta > 0)
+%
+%   OUTPUT ARGUMENTS:
+%       xk, fk, gradfk_norm  : final point, objective value, gradient norm at the solution
+%       k                    : number of iterations performed
+%       xseq                 : sequence of iterates [x0, x1, ..., xk]  (n × (k+1))
+%       btseq                : number of backtracking steps at each iteration (1 × k)
+%       tau_new              : (maxit+1) × k matrix storing the tau values used at each iteration
+%       alphas               : step lengths
+%       pks                  : search directions
 
 
 % INPUT CHECKS
@@ -100,7 +101,7 @@ if gradfk_norm < tolgrad
 end
 
 
-% Function handle for the armijo condition
+% Function handle for the armijo condition.
 farmijo = @(fk, alpha, c1_gradfk_pk) ...
     fk + alpha * c1_gradfk_pk;
 
@@ -184,7 +185,7 @@ while k < kmax && gradfk_norm >= tolgrad
 
     while bt < btmax && fnew > farmijo(fk, alpha, c1_gradfk_pk) 
 
-        alpha = rho * alpha;  % Alpha reduction. 
+        alpha = rho * alpha;  % Step reduction. 
         xnew = xk + alpha * pk; 
         fnew = f(xnew);
         bt = bt + 1;
@@ -205,7 +206,7 @@ while k < kmax && gradfk_norm >= tolgrad
         break;
     end
     
-    % Update xk, fk, gradfk_norm.
+    % Update variables.
     xk = xnew;
     fk = fnew;
     gradfk = gradf(xk);
@@ -214,7 +215,7 @@ while k < kmax && gradfk_norm >= tolgrad
 
     k = k + 1; 
 
-    % Storing
+    % Storing.
     xseq(:, k)      = xk;
     btseq(k)        = bt;
     tau_new(:, k)   = tauk; 
@@ -223,7 +224,7 @@ while k < kmax && gradfk_norm >= tolgrad
     gradfk_seq(k)   = gradfk_norm;
     fk_seq(k)        = fk;
 
-end
+end %while loop on k
 
 
 % Trimming the final structures.
