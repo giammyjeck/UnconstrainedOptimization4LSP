@@ -1,163 +1,99 @@
-function outputs(results, f, gradf, pname)
-% OUTPUTS aggiornata per struct results{truncated, modified}
-% genera grafici, tabelle e traiettorie per ogni metodo
 
-methods = fieldnames(results);  % truncated, modified
-outdir = "C:/Users/Utente/Desktop/Corsi/Numerical optimization for large scale problems and Stochastic Optimization/NumericalO4LSP/main/outputs/";
-figdir = fullfile(outdir,"figures");
-tabdir = fullfile(outdir,"tables");
-if ~exist(outdir,"dir"), mkdir(outdir); end
-if ~exist(figdir,"dir"), mkdir(figdir); end
-if ~exist(tabdir,"dir"), mkdir(tabdir); end
 
-kmax = 1000; tolgrad = 1e-6;
 
-for m = 1:length(methods)
-    method = methods{m};
-    res_method = results.(method);
 
-    % Raccogli dimensioni dai label: assumo n%d_pt%d
-    labels = fieldnames(res_method);
-    dims = unique(cellfun(@(s) sscanf(s,'n%d_pt'), labels));
+function figIter = outputs(dims, labels, res_method, fk_vec, method, figdir, pname)
+% OUTPUT
+% Plotta ||x_k - x^*|| vs iterazioni
+% Accanto all'ULTIMO punto: valore f(x_final) preso da fk_vec
+
+figIter = [];
+
+if isempty(labels)
+    warning('Labels vuote, niente da plottare');
+    return;
+end
+
+%% === Dimensione n ===
+xseq0 = res_method.(labels{1}).xseq;
+if iscell(xseq0)
+    xseq0 = xseq0{1};
+end
+n = size(xseq0,1);
+
+%% === Minimo teorico x* (Trig16) ===
+% xstar = zeros(n,1);
+% for i = 1:n-1
+%     xstar(i) = atan(-2/i);
+% end
+% xstar(n) = atan((n-1)/n);
+
+% n = length(xstar);
+% i = (1:n)';
+% Fx = sum( i .* (1 - cos(xstar)) ) ...
+%    + 2 * sum( sin(xstar(1:n-1)) ) ...
+%    - (n-1) * sin(xstar(n));
+% f_xstar = Fx;
+
+%%% minimo broyden
+xstar = ones(1,n) * (1/sqrt(n));
+
+% VALUTA_F valuta la funzione obiettivo F(x) = 0.5 * sum(r.^2)
+r = zeros(n,1);
+for k = 1:n
+    x_prev = 0; if k>1, x_prev = xstar(k-1); end
+    x_next = 0; if k<n, x_next = xstar(k+1); end
+    r(k) = (3 - 2*xstar(k))*xstar(k) - x_prev - 2*x_next + 1;
+end
+f_xstar = 0.5 * sum(r.^2);
+
+
+%% === Figura ===
+figIter = figure('Name', [method ' - Convergenza'], ...
+                 'Color', 'w', 'Units', 'normalized', ...
+                 'Position', [0.1 0.1 0.75 0.55]);
+hold on; grid on;
+colors = lines(numel(labels));
+
+%% === Plot per ogni run ===
+for s = 1:numel(labels)
+    xseq = res_method.(labels{s}).xseq;
+    if iscell(xseq), xseq = xseq{1}; end
     
-    allRows = {};  % globale
+    K = size(xseq,2);
+    err = zeros(1,K);
+    for k = 1:K
+        err(k) = norm(xseq(:,k) - xstar);
+    end
     
-    for i = 1:length(dims)
-        n = dims(i);
-        % estrai tutti i punti di partenza per questa dimensione
-        run_labels = labels(contains(labels,sprintf('n%d_',n)));
-        num_runs = length(run_labels);
-        tableRows = cell(num_runs,6);
-        success_indices = [];
+    % curva
+    plot(1:K, err, '-o', 'Color', colors(s,:), ...
+         'LineWidth', 1.4, 'MarkerSize', 4);
+    
+    % valore finale funzione dal vettore fk_vec
+    f_final = fk_vec(s);
+    
+    % etichetta accanto all'ultimo punto
+    text(K+0.2, err(end), sprintf('%.2e', f_final), ...
+         'Color', colors(s,:), 'FontSize', 9, 'VerticalAlignment','middle');
+end
 
-        figR = figure('Visible','off','Name', sprintf('%s Rates n=%d', method, n));
-        hold on; grid on;
+%% === Labels e titolo ===
+xlabel('Iterazione k');
+ylabel('||x_k - x^*||_2');
+set(gca,'YScale','log');
 
-        for s = 1:num_runs
-            r = res_method.(run_labels{s});
-            xseq = r.xseq; gnorms = zeros(1,size(xseq,2));
-            for it=1:size(xseq,2), gnorms(it) = norm(gradf(xseq(:,it))); end
+title(method + " (f(x^*) ≈ " + f_xstar + ")");
 
-            % Calcolo rate sperimentale usando estimate_rate
-            rate_exp = estimate_rate(xseq, gradf);
-            success = r.gnorm < tolgrad;
-
-            startID = "R"+(s-1); if s==1, startID="x_bar"; end
-            iters_str = sprintf("%d/%d", r.iters, kmax);
-            succ_str = "no"; if success, succ_str="yes"; end
-            tableRows(s,:) = {char(startID), r.gnorm, iters_str, char(succ_str), rate_exp, r.time};
-            allRows(end+1,:) = {char(pname), method, n, char(startID), r.gnorm, iters_str, char(succ_str), rate_exp, r.time};
-
-            if success
-                plot(0:length(gnorms)-1, log10(gnorms+1e-20),'LineWidth',1.2);
-                success_indices = [success_indices,s]; %#ok<AGROW>
-            end
-        end
-
-        xlabel('Iteration k'); ylabel('log_{10}(||\nabla f(x_k)||)');
-        title(sprintf('%s (n=%d) - Convergence Rates', method, n));
-        exportgraphics(figR, fullfile(figdir,sprintf('%s_%s_n%d_rates.png', pname, method, n)));
-        close(figR);
-
-        % Tabella CSV
-        Tn = cell2table(tableRows, 'VariableNames', {'start_pt_ID','grad_norm','iters_over_max','success_flag','rate_conv_exp','time_s'});
-        if ~isempty(success_indices)
-            avg_gn = mean([tableRows{success_indices,2}]);
-            avg_rate = mean([tableRows{success_indices,5}],'omitnan');
-            avg_time = mean([tableRows{success_indices,6}]);
-            avgRow = {"Avg(successes)", avg_gn, "", "-", avg_rate, avg_time};
-            Tn = [Tn; cell2table(avgRow,'VariableNames',Tn.Properties.VariableNames)];
-        end
-        writetable(Tn, fullfile(tabdir,sprintf('%s_%s_n%d_table.csv', pname, method, n)));
-    end
-
-    % Scalability
-    avg_times = zeros(1,length(dims)); avg_iters = zeros(1,length(dims));
-    for i=1:length(dims)
-        n=dims(i); run_labels = labels(contains(labels,sprintf('n%d_',n)));
-        times=[]; iters=[]; 
-        for s=1:length(run_labels)
-            r=res_method.(run_labels{s});
-            if r.gnorm < tolgrad
-                times=[times,r.time]; iters=[iters,r.iters]; %#ok<AGROW>
-            end
-        end
-        avg_times(i)=mean(times); avg_iters(i)=mean(iters);
-    end
-
-    figS = figure('Name',[method ' Scalability'],'Color','w','Visible','on');
-    subplot(1,2,1); loglog(dims,avg_times,'-o','LineWidth',2); grid on; xlabel('n'); ylabel('Avg Time (s)'); title('Scalabilità Tempo');
-    subplot(1,2,2); semilogx(dims,avg_iters,'-s','LineWidth',2); grid on; xlabel('n'); ylabel('Avg Iters'); title('Robustezza Iterazioni');
-    exportgraphics(figS, fullfile(figdir,sprintf('%s_%s_scalability.png', pname, method)));
-
+%% === Salvataggio ===
+if ~isempty(figdir)
+    if ~exist(figdir,'dir'), mkdir(figdir); end
+    
+    % Costruzione nome file
+    name =pname+ ".png";
+    
+    exportgraphics(figIter, fullfile(figdir, name));
 end
 
 
-%% --- 2D TRAJECTORY PLOT (scatter + contours) per n=2 ---
-idx2D = find(dims == 2, 1);
-if ~isempty(idx2D)
-    n = dims(idx2D);
-    run_labels = labels(contains(labels,sprintf('n%d_',n)));
-    fig2D = figure('Name',[method ' 2D Trajectories'],'Color','w','Units','normalized','Position',[0.1 0.1 0.8 0.4]);
-    hold on; grid on;
-
-    % Raccogli tutti i punti per limiti asse
-    all_pts = [];
-    for s = 1:length(run_labels)
-        r = res_method.(run_labels{s});
-        all_pts = [all_pts, r.xseq]; %#ok<AGROW>
-    end
-    xlims = [min(all_pts(1,:))-0.5, max(all_pts(1,:))+0.5];
-    ylims = [min(all_pts(2,:))-0.5, max(all_pts(2,:))+0.5];
-
-    % Griglia per contour
-    x1 = linspace(xlims(1), xlims(2), 100);
-    x2 = linspace(ylims(1), ylims(2), 100);
-    [X1,X2] = meshgrid(x1,x2);
-    Z = zeros(size(X1));
-    for i = 1:size(X1,1)
-        for j = 1:size(X1,2)
-            Z(i,j) = f([X1(i,j); X2(i,j)]);
-        end
-    end
-
-    
-    % Contour log
-    contour(X1,X2, log10(Z - min(Z(:)) + 1e-9), 25, 'LineColor',[0.7 0.7 0.7]);
-
-    % Scatter + linee della traiettoria per ciascun run
-    colors = lines(length(run_labels));
-    for s = 1:length(run_labels)
-        r = res_method.(run_labels{s});
-        plot(r.xseq(1,:), r.xseq(2,:), '-o', 'Color', colors(s,:), 'MarkerSize',4, 'LineWidth',1.2);
-    end
-    xlabel('x_1'); ylabel('x_2');
-    title(sprintf('%s (n=2) Trajectories + Contours', method));
-    axis([xlims, ylims]);
-    exportgraphics(fig2D, fullfile(figdir,sprintf('%s_%s_n2_trajectories.png', pname, method)));
-    close(fig2D);
-end
-
-
-
-
-Tall = cell2table(allRows, 'VariableNames', {'problem','method','n','start_pt_ID','grad_norm','iters_over_max','success_flag','rate_conv_exp','time_s'});
-writetable(Tall, fullfile(tabdir, sprintf('%s_GLOBAL_table.csv', pname)));
-
-end
-
-
-function p = estimate_rate(xseq, gradf)
-    % Stima esponente p basata sulle ultime tre norme di gradiente
-    if isempty(xseq) || size(xseq,2) < 4
-        p = NaN; return;
-    end
-    g3 = norm(gradf(xseq(:, end)));
-    g2 = norm(gradf(xseq(:, end-1)));
-    g1 = norm(gradf(xseq(:, end-2)));
-    if any([g1,g2,g3] < 1e-14)
-        p = NaN; return;
-    end
-    p = log(g3/g2) / log(g2/g1);
-    if p < 0 || p > 3, p = NaN; end
 end

@@ -1,117 +1,62 @@
-% =========================================================================
-% TASK 3 - CASE 1 (con SUCCESS)
-%
-% Obiettivo: capire se Modified Newton converge quando SOLO la Hessiana è FD.
-%   - BASELINE: grad exact + Hess exact
-%   - CASE 1 : grad exact + Hess FD (h / hi), k=4,8,12
-%
-% Success = (||grad f(x_k)|| < tolgrad)
-%
-% Nota: Hess FD bandata con "coloring" 1D:
-%   - bw=0  (Trig16: Hess diagonale)
-%   - bw=2  (Broyden31: Hess pentadiagonale)
-% In questo modo non facciamo n valutazioni di gradiente, ma (2*bw+1).
-% =========================================================================
-
+%% ========================================================================
+% TASK 3 - CASE 1 (solo n=2, k=4) per plot 2D
+% ========================================================================
 clear; clc; close all;
+
 addpath(genpath("C:\Users\Utente\Desktop\Corsi\Numerical optimization for large scale problems and Stochastic Optimization\NumericalO4LSP\main"));
 
-% --- seed richiesto dal progetto ---
-seed = 346710;
+%% --- seed ---
+seed = 346710; 
 rng(seed,"twister");
 
-% --- dimensioni e step FD ---
-n_list  = [2, 1e3, 1e4, 1e5];
-k_list  = [4, 8, 12];
-modes   = ["h","hi"];      % h: 10^-k ; hi: 10^-k * max(|x_i|,1)
+%% --- problema ---
+[f, grad_exact, hess_exact, xbarfun] = problem_broyden31();
+pname = "problem_broyden31";
 
-% --- parametri Modified Newton ---
-kmax    = 50;
+%% --- parametri Modified Newton ---
+kmax    = 20;
 tolgrad = 1e-6;
-c1      = 1e-3;
-rho     = 0.8;
-btmax   = 40;
-%beta    = 1e-3;
-max_cg   = 1000;
+c1      = 1e-4;
+rho     = 0.3;
+btmax   = 5;
+max_cg  = 5;
 
-% --- problemi ---
-%probs  = {@problem_broyden31};
-%pnames = ["problem_broyden31"];
+%% --- starting points (1 standard + 5 random) ---
+n = 2;  
+xbar = xbarfun(n);
+X0   = [xbar, xbar + (2*rand(n,5)-1)];  % 6 start points
 
-probs  = {@problem_trig16};
-pnames = ["problem_trig16"];
+%% --- FD parameters ---
+kfd  = 8;
+mode = 'h';
+bw   = 2; % Trig16: diagonale
+Hfd = @(x) hess_fd_from_grad_banded(grad_exact, x, kfd, mode, bw);
 
-% half-bandwidth Hessiana (per FD banded)
-bwH = [0]; % 16
-%bwH = 2 % 31
-
-
-% --- output ---
-outdir = "out_task3_case1_success";
-if ~exist(outdir,"dir"), mkdir(outdir); end
-
-results = struct();
-
-for p = 1:numel(probs)
-
-    % mi aspetto che problem_* ritorni almeno:
-    % [f, grad_exact, hess_exact, xbarfun, rfun]  (rfun qui ignorata)
-    [f, grad_exact, hess_exact, xbarfun] = probs{p}();
-    pname = pnames(p);
-    bw    = bwH(p);
-
-    fprintf("\n==============================\n");
-    fprintf("TASK3 CASE1 SUCCESS: %s (bwH=%d)\n", pname, bw);
-    fprintf("==============================\n");
-
-    results.(pname) = struct();
-
-    for n = n_list
-        fprintf("\n--- n = %d ---\n", n);
-
-        % stessi random start per confronto pulito
-        rng(seed + 1000*p + n, "twister");
-
-        xbar = xbarfun(n);
-        X0   = [xbar, xbar + (2*rand(n,5)-1)];  % 6 start: xbar + 5 random
-
-        dim_field = sprintf("n%d", n);
-        results.(pname).(dim_field) = struct();
-
-        % Per n grande, NON vogliamo salvare xseq/pks (se il tuo MN salva storia)
-        store = (n == 2);
-
-        % =========================
-        % BASELINE (EXACT)
-        % =========================
-        fprintf("  BASELINE (exact):\n");
-        res_exact = run_6starts_success(store, X0, f, grad_exact, hess_exact, ...
+%% --- RUN Modified Newton ---
+store = true; % non salviamo xseq nel run
+res_fd = run_6starts_success(store, X0, f, grad_exact, Hfd, ...
             kmax, tolgrad, c1, rho, btmax, max_cg);
-        results.(pname).(dim_field).exact = res_exact;
 
-        % =========================
-        % CASE 1: grad exact + Hess FD bandata
-        % =========================
-        for kk = 1:numel(k_list)
-            kfd = k_list(kk);
+%% --- prepara struttura per la funzione outputs ---
+labels = {};
+res_method = struct();
 
-            for mm = 1:numel(modes)
-                mode = char(modes(mm));
-                tag  = sprintf("case1_k%d_%s", kfd, mode);
 
-                fprintf("  %s:\n", tag);
 
-                % Hess FD = FD del gradiente ESATTO, ma SOLO nella banda
-                Hfd = @(x) hess_fd_from_grad_banded(grad_exact, x, kfd, mode, bw);
-
-                res = run_6starts_success(store, X0, f, grad_exact, Hfd, ...
-                    kmax, tolgrad, c1, rho, btmax, max_cg);
-
-                results.(pname).(dim_field).(tag) = res;
-            end
-        end
-    end
+for s = 1:size(X0,2)
+    labels{end+1} = sprintf('n2_pt%d', s);
+    % salva la traiettoria dello start s
+    res_method.(labels{end}).xseq = res_fd(s).xseq;  
 end
 
-save(fullfile(outdir,"results_case1_success.mat"),"results");
-disp("Fatto. Salvato in: " + fullfile(outdir,"results_case1_success.mat"));
+%% --- cartella per grafici ---
+figdir = "out_task3_case1_success";
+if ~exist(figdir,"dir"), mkdir(figdir); end
+
+%% --- genera plot 2D ---
+%method = 'ModifiedNewton';
+method = 'TruncatedNewton';
+
+outputs(n, labels, res_method, f, method, figdir, pname);
+
+

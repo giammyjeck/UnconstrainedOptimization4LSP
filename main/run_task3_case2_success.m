@@ -28,20 +28,20 @@ k_list  = [4, 8, 12];
 modes   = ["h","hi"];      % h: 10^-k ; hi: 10^-k * max(|x_i|,1)
 
 % --- parametri Modified Newton ---
-kmax    = 20;
+kmax    =50;
 tolgrad = 1e-6;
 c1      = 1e-4;
 rho     = 0.5;
-btmax   = 5;
-beta    = 1e-3;
+btmax   = 10;
+beta    = 1e-2;
 %max_cg   = 5;
 
 % --- problemi ---
-probs  = {@problem_broyden31};
-pnames = ["problem_broyden31"];
+%probs  = {@problem_broyden31};
+%pnames = ["problem_broyden31"];
 
-%probs  = {@problem_trig16};
-%pnames = ["problem_trig16"];
+probs  = {@problem_trig16};
+pnames = ["problem_trig16"];
 
 
 outdir = "out_task3_case2_success";

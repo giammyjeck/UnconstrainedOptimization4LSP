@@ -1,0 +1,180 @@
+clear; 
+clc;
+close all;
+addpath(genpath("C:\Users\Utente\Desktop\Corsi\Numerical optimization " + ...
+    "for large scale problems and Stochastic Optimization\NumericalO4LSP\main"));
+
+rng(346710,"twister");
+
+
+% Set SIMULATION parameters
+n = 1e4;       
+kfd = NaN;      % passo FD
+mode = 'h';   % modalità FD
+
+% Choose only one problem:
+% PROBLEM BROYDEN31
+outdirGRAPHS = "graficiBROY31";
+if ~exist(outdirGRAPHS,"dir"), mkdir(outdir); end
+outdirRATE = "rateBROY31";
+if ~exist(outdirRATE,"dir"), mkdir(outdir); end
+
+[f, grad_exact, hess_exact, xbarfun, rfun] = problem_broyden31();
+xbar = xbarfun(n);
+X0   = [xbar, xbar + (2*rand(n,5)-1)];  
+bwJ = 1;
+[grad_fd, hess_fd] = make_broyden_fd_oracles_cached_GN(rfun, kfd, mode, bwJ);
+
+params_trunc.kmax  = 20;
+params_trunc.tolgrad = 1e-6;
+params_trunc.c1    = 1e-4;
+params_trunc.rho   = 0.3;
+params_trunc.btmax = 5;
+params_trunc.beta  = 5;
+
+params_mod.kmax  = 20;
+params_mod.tolgrad = 1e-6;
+params_mod.c1    = 1e-4;
+params_mod.rho   = 0.5;
+params_mod.btmax = 5;
+params_mod.beta  = 1e-3;
+
+
+% PROBLEM TRIG16
+% outdirGRAPHS = "graficiTRIG16";
+% if ~exist(outdirGRAPH,"dir"), mkdir(outdir); end
+% outdirRATE = "rateTRIG16";
+% if ~exist(outdir,"dir"), mkdir(outdir); end
+% [f, grad_exact, hess_exact, xbarfun, rfun] = problem_trig16();
+% xbar = xbarfun(n);
+% X0   = [xbar, xbar + (2*rand(n,5)-1)];  
+% %grad_fd = @(x) trig_fd_grad_central_from_tfun(rfun, x, kfd, mode);
+% %hess_fd = @(x) trig_fd_hess_diag_central_from_tfun(rfun, x, kfd, mode);
+
+% params_trunc.kmax  = ;
+% params_trunc.tolgrad = 1e-6;
+% params_trunc.c1    = ;
+% params_trunc.rho   = ;
+% params_trunc.btmax = ;
+% params_trunc.beta  = ;
+% 
+% params_mod.kmax  = ;
+% params_mod.tolgrad = 1e-6;
+% params_mod.c1    = ;
+% params_mod.rho   = ;
+% params_mod.btmax = ;
+% params_mod.beta  = ;
+
+
+% 1) TRUNCATED NEWTON 
+
+fprintf("\n--- Truncated ---\n");
+labels_trunc = {};
+res_method_trunc = struct();
+num_pts = size(X0,2);
+% Preallocazione dell'array di struct
+res_fd(num_pts) = struct('xseq',[],'fk',[],'gn',[],'iters',[],'time',[],'success',[], 'rate', []);
+for s = 1:num_pts
+    x0 = X0(:,s);
+    tic;
+        % truncated_newton_method deve restituire xseq completo se store==true
+        [~, fk, gn, it, xseq] = truncated_newton_method(x0, f, grad_exact, hess_exact, ...
+                                params_trunc.kmax, params_trunc.tolgrad, ...
+                                params_trunc.c1, params_trunc.rho, ...
+                                params_trunc.btmax, params_trunc.beta);
+
+    t = toc;
+
+    succ = (gn < 1000);
+    K = size(xseq,2);          % numero di iterazioni
+    rate_exp = zeros(1,K-1);   % rate tra iterazioni consecutive
+    
+    for k = 2:K
+        xseq_tn = xseq(:,1:k);             % sequenza fino all'iterazione k
+        rate_exp(k-1) = estimate_rate(xseq_tn, grad_exact);
+    end
+
+    % Salva i dati nello struct corrispondente allo start s
+    res_fd(s).fk      = fk;
+    res_fd(s).gn      = gn;
+    res_fd(s).iters   = it;
+    res_fd(s).time    = t;
+    res_fd(s).success = succ;
+    res_fd(s).xseq = xseq;  % salva sequenza iterativa completa
+    res_fd(s).rate = rate_exp;
+
+end
+
+num_pts = numel(res_fd);   % numero di start
+fk_vec = zeros(1,num_pts);
+for s = 1:num_pts
+    fk_vec(s) = res_fd(s).fk;  % estrai fk da ciascun run
+end
+for s = 1:size(X0,2)
+    labels_trunc{end+1} = sprintf('n2_pt%d', s);
+    res_method_trunc.(labels_trunc{end}).xseq = res_fd(s).xseq;
+    res_method_trunc.(labels_trunc{end}).rate = res_fd(s).rate;
+
+end
+fig_trunc = outputs(n, labels_trunc, res_method_trunc,fk_vec, ...
+                   'TruncatedNewton\_exact\_n1e4', outdirGRAPHS, 'TruncExactN1e4');
+fig_rate = outputs_rate(n, labels_trunc, res_method_trunc,fk_vec, ...
+                   'TruncatedNewton\_c1\_n1e4\_12', outdirRATE, 'TruncC1N1e412');
+
+
+% 2) Modified
+
+fprintf("\n modified Newton \n");
+labels_mod = {};
+res_method_mod = struct();
+num_pts = size(X0,2);
+% Preallocazione dell'array di struct
+res_fd(num_pts) = struct('xseq',[],'fk',[],'gn',[],'iters',[],'time',[],'success',[], 'rate', []);
+for s = 1:num_pts
+    x0 = X0(:,s);
+    tic;
+        % truncated_newton_method deve restituire xseq completo se store==true
+        [~, fk, gn, it, xseq] = modified_newton_method(x0, f, grad_exact, hess_exact, ...
+                                params_mod.kmax, params_mod.tolgrad, ...
+                                params_mod.c1, params_mod.rho, ...
+                                params_mod.btmax, params_mod.beta);
+
+    t = toc;
+
+    succ = (gn < 1000);
+
+    K = size(xseq,2);          % numero di iterazioni
+    rate_exp = zeros(1,K-1);   % rate tra iterazioni consecutive
+    
+    for k = 2:K
+        xseq_tn = xseq(:,1:k);             % sequenza fino all'iterazione k
+        rate_exp(k-1) = estimate_rate(xseq_tn, grad_exact);
+    end
+    
+
+    % Salva i dati nello struct corrispondente allo start s
+    res_fd(s).fk      = fk;
+    res_fd(s).gn      = gn;
+    res_fd(s).iters   = it;
+    res_fd(s).time    = t;
+    res_fd(s).success = succ;
+    res_fd(s).rate = rate_exp;
+    res_fd(s).xseq = xseq;  % salva sequenza iterativa completa
+
+end
+
+for s = 1:size(X0,2)
+    labels_mod{end+1} = sprintf('n2_pt%d', s);
+    res_method_mod.(labels_mod{end}).xseq = res_fd(s).xseq;
+    res_method_mod.(labels_mod{end}).rate = res_fd(s).rate;
+end
+
+num_pts = numel(res_fd);   % numero di start
+fk_vec = zeros(1,num_pts);
+for s = 1:num_pts
+    fk_vec(s) = res_fd(s).fk;  % estrai fk da ciascun run
+end
+fig_mod = outputs(n, labels_mod, res_method_mod, fk_vec, ...
+                 'ModifiedNewton\_exact\_n1e4', outdirGRAPHS, 'ModExactN1e4');
+fig_rate = outputs_rate(n, labels_mod, res_method_mod, fk_vec, ...
+                 'ModifiedNewton\_c1\_n1e4\_12', outdirRATE, 'ModC1N1e412');
