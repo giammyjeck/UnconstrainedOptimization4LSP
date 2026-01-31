@@ -1,34 +1,38 @@
 function [xk,fk,gradfk_norm,k,xseq,btseq,pks,inner_iters] = truncated_newton_method(x0,f,gradf,hessf,kmax,tolgrad,c1,rho,btmax,max_cg) 
-% TRUNCATED_NEWTON_METHOD Solves unconstrained optimization problems.
-%   This function implements the Truncated Newton method (also known as 
-%   Newton-CG). It uses a Conjugate Gradient (CG) inner loop to compute 
-%   the descent direction and an Armijo-backtracking line search for 
-%   global convergence.
+
+% TRUNCATED_NEWTON_METHOD Truncated Newton method (Newton-CG)
 %
-%   [xk, fk, gradfk_norm, k, xseq, btseq, pks, inner_iters] = ...
+%   [xk, fk, gradfk_norm, k, xseq, btseq, alphas, pks, inner_iters] = ...
 %       TRUNCATED_NEWTON_METHOD(x0, f, gradf, hessf, kmax, tolgrad, c1, rho, btmax, max_cg)
 %
+%   This function solves unconstrained numerical optimization problems 
+%   using a Truncated Newton approach.
+%
 %   INPUT ARGUMENTS:
-%       x0          - Initial guess (column vector)
-%       f           - Function handle for f(x)
-%       gradf       - Function handle for the gradient gradf(x)
-%       hessf       - Function handle for the Hessian matrix H(x)
-%       kmax        - Maximum number of outer (Newton) iterations
-%       tolgrad     - Stopping tolerance on the norm of the gradient
-%       c1          - Armijo condition parameter (0 < c1 < 1)
-%       rho         - Backtracking reduction factor (0 < rho < 1)
-%       btmax       - Maximum number of backtracking steps per iteration
-%       max_cg      - Maximum number of inner (CG) iterations
+%       x0          : Initial guess (column vector)
+%       f           : Function handle for the objective function f(x)
+%       gradf       : Function handle for the gradient gradf(x)
+%       hessf       : Function handle for the Hessian matrix H(x)
+%       kmax        : Maximum number of outer iterations
+%       tolgrad     : Stopping tolerance on the norm of the gradient
+%       c1          : Armijo condition parameter (0 < c1 < 1)
+%       rho         : Backtracking reduction factor (0 < rho < 1)
+%       btmax       : Maximum number of backtracking steps per iteration
+%       max_cg      : Maximum number of inner (CG) iterations
 %
 %   OUTPUT ARGUMENTS:
-%       xk          - Final point reached by the algorithm
-%       fk          - Function value at xk
-%       gradfk_norm - Norm of the gradient at xk
-%       k           - Total number of outer iterations performed
-%       xseq        - Sequence of points generated (including x0)
-%       btseq       - Number of backtracking steps per iteration
-%       pks         - Sequence of descent directions computed
-%       inner_iters - Number of CG iterations performed at each step k
+%       xk          : Final point reached by the algorithm
+%       fk          : Function value at xk
+%       gradfk_norm : Norm of the gradient at xk
+%       k           : Total number of iterations performed
+%       xseq        : Sequence of points generated (n x (k+1))
+%       btseq       : Number of backtracking steps per iteration (1 x k)
+%       alphas      : Sequence of step lengths (1 x k)
+%       pks         : Sequence of search directions (n x k)
+%       inner_iters : Number of CG iterations performed per step (1 x k)
+%       btseq       : Number of backtracking steps per iteration
+%       pks         : Sequence of descent directions computed
+%       inner_iters : Number of CG iterations performed at each step k
 
 
 
@@ -106,11 +110,11 @@ if gradfk_norm < tolgrad
 end
 
 
-% Function handle for the armijo condition
+% Function handle for the armijo condition.
 farmijo = @(fk, alpha, c1_gradfk_pk) ...
     fk + alpha * c1_gradfk_pk;
 
-% Variables iniziatization
+% Preallocations.
 xseq        = zeros(length(x0), kmax);
 btseq       = zeros(1, kmax);
 alphas      = zeros(1, kmax);
@@ -120,9 +124,8 @@ inner_iters = zeros(1, kmax);
 
 k = 1;
 %k = 0;
-i = 0;
 while k <= kmax && gradfk_norm >= tolgrad
-    i= i+1;
+
 
     % The system we need to solve is Hess(fk)*pk = -graf(fk) <-> Hk*z=ck
     z = zeros(length(x0),1); 
@@ -133,19 +136,17 @@ while k <= kmax && gradfk_norm >= tolgrad
     % as a fallback to guarantee a valid descent direction even if 
     % the CG inner loop fails or terminates at the first iteration.
     p_tn = ck; 
-
-    
     eta_k = min(0.5, sqrt(gradfk_norm));
 
-    r = ck - Hk * z; % Residual of the system
+    r = ck - Hk * z; % Residual of the system.
     r_old = r'*r;
     dk = r; % d is the conjugate direction, at the first iteration z = 0 so dk = ck.
 
     stop_inner = false; % Boolean variable used to understand whether the inner loop got to convergence,
-    %  it has to go back to false at each iteration k
+                        % it has to go back to false at each iteration k.
     
     j = 0;
-    while ~stop_inner && j < max_cg % Inner loop for solving the system with CG
+    while ~stop_inner && j < max_cg % Inner loop for solving the system with CG.
 
         Hdk = Hk*dk;
         curv = dk'*Hdk;
@@ -154,39 +155,36 @@ while k <= kmax && gradfk_norm >= tolgrad
         if curv <= 1e-12
             
             if j == 0
-                p_tn = -gradfk;
-                
+                p_tn = -gradfk;                
             else
                 p_tn = z;
-            end       
+            end  
+
             stop_inner = true;
             break
 
         else
-
             alpha_j = r_old/curv;
             z = z + alpha_j * dk;
             r = r - alpha_j * Hdk; 
 
             
-            % Update for the next iteration
+            % Updates for the next iteration.
             rk_new = r'*r;
             beta_j = rk_new/r_old;
             dk = r + beta_j * dk;
             r_old = rk_new; 
             p_tn = z;
-
             j = j+1;
 
         end
 
-        % Check on convergence
+        % Checking convergence.
         if norm(r)/norm(ck) <= eta_k 
             p_tn = z;      
             stop_inner = true;
             break;
         end
-
     end
 
     inner_iters(k) = j;
@@ -203,16 +201,16 @@ while k <= kmax && gradfk_norm >= tolgrad
     end
 
 
-    % Armijo Backtracking
+    % BACKTRACKING.
 
-    alpha = 1;
-    xnew = xk + alpha * pk;
+    alpha = 1; % Reset the value of alpha (parameter used for linesearch).
+    xnew = xk + alpha * pk;   % Computing the candidate solution at step k.
     fnew = f(xnew);
-    c1_gradfk_pk = c1 * (gradfk' * pk);
+    c1_gradfk_pk = c1 * gradfk' * pk;
 
     bt = 0;
     while bt < btmax && fnew > farmijo(fk, alpha, c1_gradfk_pk)
-        alpha = rho * alpha; % step reduction
+        alpha = rho * alpha; % Step reduction
         xnew = xk + alpha * pk;
         fnew = f(xnew);
         bt = bt + 1;
@@ -228,14 +226,14 @@ while k <= kmax && gradfk_norm >= tolgrad
         break;            
     end
             
-    % Update variables
+    % Update variables.
     xk = xnew;
     fk = fnew;
     gradfk = gradf(xk);
     gradfk_norm = norm(gradfk);
     k = k + 1;
     
-    % Storage
+    % Storing
     xseq(:, k) = xk;
     btseq(k) = bt;
     pks(:, k) = pk;
@@ -243,7 +241,7 @@ while k <= kmax && gradfk_norm >= tolgrad
 
 end %while loop on k
 
-% Trim outputs
+% Trimming the final structures.
 xseq   = xseq(:, 1:k);
 btseq  = btseq(1:k);
 pks    = pks(:, 1:k);
