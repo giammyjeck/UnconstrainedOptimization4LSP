@@ -1,60 +1,98 @@
-# NumericalO4LSP
+# Numerical Optimization for Large-Scale Problems
 
-Numerical Optimization for large scale problems
+Unconstrained optimization with derivative-based methods: **Modified Newton**
+and **Truncated Newton**, applied to two large-scale test problems.
 
+Project for the *Numerical Optimization* course — Laurea Magistrale in
+Ingegneria Matematica, Politecnico di Torino, A.Y. 2025–2026.
 
-
-
-
-#### Modified Newton method (+ Back-tracking)
-
-* dopo
-* 
-
+**Authors:** Francesca Bagnato, Gianmarco Foni, Giovanna Maccarone
 
 ---
-#### Truncated Newton (Newton–CG)  
 
-Metodo per ottimizzazione numerica su larga scala basato su **Newton Inexacto** + **Gradiente Coniugato troncato (CG)** con **line search**.
+## Overview
 
+This repository implements and compares two derivative-based unconstrained
+optimization methods on large-scale problems, using both exact and
+finite-difference approximated derivatives:
 
-#### Obiettivo
-Trovare una direzione di Newton approssimata $p^k$ risolvendo  
-$\nabla^2 f(x^k) \, p^k = -\nabla f(x^k)$
-senza formare o fattorizzare l'Hessiana, utilizzando un algoritmo iterativo (CG).
+- **Modified Newton method** — standard version and an eigenvalue-flipping
+  variant for Hessian correction when it is not positive definite.
+- **Truncated Newton method** — standard version and a Hessian-free variant
+  based on the conjugate gradient method.
 
-Il metodo interrompe CG prima della convergenza completa (**truncated**) e gestisce anche il caso in cui l’Hessiana non sia definita positiva.
+The methods are tested on two problems from More–Garbow–Hillstrom's
+classical test set:
 
+- **Problem 16 — Banded Trigonometric** (`Trig16`)
+- **Problem 31 — Broyden Tridiagonal least-squares** (`Broyden31`)
 
-#### Struttura del metodo
+for increasing problem dimensions (n = 2, 10³, 10⁴, 10⁵) and multiple
+random starting points, in order to study convergence behavior,
+convergence rate, and scalability.
 
-##### 1. Sistema lineare da risolvere
-$H_k p = -g_k \quad \text{con } H_k=\nabla^2 f(x^k),\ g_k=\nabla f(x^k)$
+## Finite Differences
 
-Si evita di calcolare $H_k$ esplicitamente: basta saper applicare  
-$v\mapsto H_k v$
+Besides exact analytical derivatives, the repository includes a
+finite-difference implementation of gradients and Hessians, tested under
+two settings:
 
+- **Case 1** — exact gradient, finite-difference Hessian
+- **Case 2** — both gradient and Hessian approximated via finite differences
 
-##### 2. Risoluzione tramite **CG troncato**
-Durante CG si interrompe quando:
-- $ \|H_k p_m + g_k\| \le \eta_k \|g_k\| $(accuratezza inexact Newton)  
-- raggiunto un numero massimo di iterazioni  
-- individuata **curvatura negativa**  
-  $d_j^\top H_k d_j \le 0$
-  → CG si ferma e si usa la direzione $d_j$ come direzione discendente.
+for different finite-difference step sizes (controlled by a parameter `k`),
+in order to assess the impact of derivative approximation error on
+convergence.
 
+## Repository structure
 
-##### 3. Direzione sempre di discesa
-Assicurare:
-$g_k^\top p^k < 0$
-Se non avviene → usare $-g_k$ o la direzione negativa trovata da CG.
+> Adjust this section to match your actual folder layout.
 
+```
+.
+├── solvers/                 # Method implementations (Modified Newton, Truncated Newton, variants)
+├── problems/                # Test problem definitions (Trig16, Broyden31)
+├── fd/                      # Scripts for the finite differences
+├── plot/                    # Functions for plot and tables
+├── utils/                   # Scripts for diagnostic and tuning
+├── Documentation/           # PDF report
+└── README.md
+```
 
-##### 4. Line Search (Backtracking)
-Trovare $\alpha_k$ tale che:
-$f(x^k + \alpha_k p^k) \le f(x^k) + c \alpha_k g_k^\top p^k$
+## Requirements
 
-Aggiornamento:
-$x^{k+1} = x^k + \alpha_k p^k$
+- MATLAB (or Octave) 
+- No additional toolboxes beyond base MATLAB, unless otherwise noted
 
+## How to run
 
+```matlab
+% Example — adjust to your actual entry point
+run('experiments/run_trig16.m')
+run('experiments/run_broyden31.m')
+```
+
+Results (convergence rates, iteration counts, stopping flags) are saved to
+the `graphs_trig16/` and `graphs_broyden31/`  folder and summarized in tables and plots included in the
+report.
+
+## Key results (summary)
+
+- **Trig16**: with exact derivatives, Modified Newton achieves rates close
+  to quadratic (≈2.3–2.5), Truncated Newton around 1.5. Both methods
+  deteriorate sharply at n = 10⁵ due to the ill-conditioning of the
+  problem's Hessian. Finite-difference derivatives (especially Case 2)
+  further reduce robustness.
+- **Broyden31**: both methods converge from all starting points and all
+  dimensions with exact derivatives. Convergence rates are stable across n.
+  With finite differences, Case 1 remains essentially unaffected, while
+  Case 2 breaks down as the FD step size decreases (all runs fail at
+  k = 12 for n ≥ 10³, hitting the maximum iteration limit).
+
+Full numerical results, tables, and figures are available in the project
+report (`report/`).
+
+## License
+
+Specify a license (e.g., MIT) or state that this is coursework not intended
+for reuse without permission.
