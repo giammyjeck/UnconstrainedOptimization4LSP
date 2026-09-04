@@ -1,0 +1,255 @@
+function [xk,fk,gradfk_norm,k,xseq,btseq,pks,inner_iters] = truncated_newton_method(x0,f,gradf,hessf,kmax,tolgrad,c1,rho,btmax,max_cg) 
+
+% TRUNCATED_NEWTON_METHOD Truncated Newton method (Newton-CG)
+%
+%   [xk, fk, gradfk_norm, k, xseq, btseq, alphas, pks, inner_iters] = ...
+%       TRUNCATED_NEWTON_METHOD(x0, f, gradf, hessf, kmax, tolgrad, c1, rho, btmax, max_cg)
+%
+%   This function solves unconstrained numerical optimization problems 
+%   using a Truncated Newton approach.
+%
+%   INPUT ARGUMENTS:
+%       x0          : Initial guess (column vector)
+%       f           : Function handle for the objective function f(x)
+%       gradf       : Function handle for the gradient gradf(x)
+%       hessf       : Function handle for the Hessian matrix H(x)
+%       kmax        : Maximum number of outer iterations
+%       tolgrad     : Stopping tolerance on the norm of the gradient
+%       c1          : Armijo condition parameter (0 < c1 < 1)
+%       rho         : Backtracking reduction factor (0 < rho < 1)
+%       btmax       : Maximum number of backtracking steps per iteration
+%       max_cg      : Maximum number of inner (CG) iterations
+%
+%   OUTPUT ARGUMENTS:
+%       xk          : Final point reached by the algorithm
+%       fk          : Function value at xk
+%       gradfk_norm : Norm of the gradient at xk
+%       k           : Total number of iterations performed
+%       xseq        : Sequence of points generated (n x (k+1))
+%       btseq       : Number of backtracking steps per iteration (1 x k)
+%       alphas      : Sequence of step lengths (1 x k)
+%       pks         : Sequence of search directions (n x k)
+%       inner_iters : Number of CG iterations performed per step (1 x k)
+%       btseq       : Number of backtracking steps per iteration
+%       pks         : Sequence of descent directions computed
+%       inner_iters : Number of CG iterations performed at each step k
+
+
+
+% INPUT CHECKS
+
+if ~isnumeric(x0) || ~isvector(x0)
+    error('x0 must be a numeric column vector.');
+end
+xk = x0(:); % force column vector
+n = length(xk);
+
+if ~isa(f,'function_handle')
+    error('f must be a function handle.');
+end
+try
+    fk = f(xk);
+catch
+    error('f(x0) cannot be evaluated.');
+end
+if ~isscalar(fk) || ~isreal(fk)
+    error('f(x) must return a real scalar.');
+end
+
+if ~isa(gradf,'function_handle')
+    error('gradf must be a function handle.');
+end
+try
+    gradfk = gradf(xk);
+catch
+    error('gradf(x0) cannot be evaluated.');
+end
+if ~isnumeric(gradfk) || ~isequal(size(gradfk),[n,1])
+    error('gradf(x) must return a column vector of the same size as x.');
+end
+
+if ~isa(hessf,'function_handle')
+    error('hessf must be a function handle.');
+end
+try
+    H0 = hessf(xk);
+catch
+    error('hessf(x0) cannot be evaluated.');
+end
+if ~isnumeric(H0) || ~isequal(size(H0),[n,n])
+    error('hessf(x) must return an n-by-n matrix.');
+end
+
+if ~isscalar(kmax) || kmax <= 0 || floor(kmax) ~= kmax
+    error('kmax must be a positive integer.');
+end
+
+if ~isscalar(tolgrad) || tolgrad <= 0
+    error('tolgrad must be a positive scalar.');
+end
+
+if ~isscalar(c1) || c1 <= 0 || c1 >= 1
+    error('c1 must satisfy 0 < c1 < 1.');
+end
+
+if ~isscalar(rho) || rho <= 0 || rho >= 1
+    error('rho must satisfy 0 < rho < 1.');
+end
+
+if ~isscalar(btmax) || btmax <= 0 || floor(btmax) ~= btmax
+    error('btmax must be a positive integer.');
+end
+
+if ~isscalar(max_cg) || max_cg <= 0
+    error('max_cg must be a positive scalar.');
+end
+
+gradfk_norm = norm(gradfk);
+if gradfk_norm < tolgrad
+    warning('Initial point already satisfies the stopping criterion.');
+end
+
+
+% Function handle for the armijo condition.
+farmijo = @(fk, alpha, c1_gradfk_pk) ...
+    fk + alpha * c1_gradfk_pk;
+
+% Preallocations.
+xseq        = zeros(length(x0), kmax+1);
+btseq       = zeros(1, kmax);
+alphas      = zeros(1, kmax);
+pks         = zeros(length(x0), kmax);
+inner_iters = zeros(1, kmax); 
+
+
+%k = 1;
+k = 0;
+xseq(:,1) = xk;   % xk qui è ancora x0
+while k < kmax && gradfk_norm >= tolgrad
+
+    eta_k = min(0.5, sqrt(gradfk_norm))*gradfk_norm;
+    % The system we need  to solve is Hess(fk)*pk = -graf(fk) <-> Hk*z=ck
+    z = zeros(length(x0),1); 
+    Hk = hessf(xk);
+    rk =gradfk;
+    dk = -rk;
+    %ck = -gradfk;
+
+    % Initialize p_tn with the steepest descent direction (-gradfk) 
+    % as a fallback to guarantee a valid descent direction even if 
+    % the CG inner loop fails or terminates at the first iteration.
+    %p_tn = ck; 
+
+    %r = ck - Hk * z; % Residual of the system.
+    r_old = rk'*rk;
+    %dk = r; % d is the conjugate direction, at the first iteration z = 0 so dk = ck.
+
+    stop_inner = false; % Boolean variable used to understand whether the inner loop got to convergence,
+                        % it has to go back to false at each iteration k.
+    
+    j = 0;
+    while ~stop_inner && j < max_cg % Inner loop for solving the system with CG.
+
+        Hdk = Hk*dk;
+        curv = dk'*Hdk;
+        
+        % If tnhe curvature is positive we can proceed with CG method.
+        if curv <= 1e-10% * norm(dk)^2 %* norm(Hk, 'fro')   % soglia relativa alla scala della matrice    
+            if j == 0
+                p_tn = -gradfk;                
+            else
+                p_tn = z;
+            end  
+            %stop_inner = true;
+            break
+
+        else
+            alpha_j = r_old/curv;
+            z = z + alpha_j * dk;
+            rk = rk + alpha_j * Hdk; %!!!!!!!!!!11 +++++ ?
+
+            % Checking convergence.
+            if norm(rk) <= eta_k 
+                p_tn = z;       %% ridondante?? 
+                %stop_inner = true;
+                break;
+            end
+            
+            % Updates for the next iteration.
+            rk_new = rk'*rk;
+            beta_j = rk_new/r_old;
+            dk = -rk + beta_j * dk;
+            r_old = rk_new; 
+            %p_tn = z;
+            j = j+1;
+
+        end
+
+    end
+
+    j_cg = j;
+    if j == max_cg
+        disp('MAX CG (Truncated Newton): maximum number of cg iterations reached.');
+        p_tn = z;   % CG esaurito senza soddisfare curvatura negativa o tolleranza: usa l'ultimo iterato valido
+    end
+    pk = p_tn;
+    
+    if norm(pk) <= 1e-12
+        %disp('Truncated Newton: null direction, stop.');
+        if gradfk_norm < tolgrad
+             return;
+        else
+            %warning('Truncated Newton: pk near zero but gradient not converged.');
+        end
+
+    end
+
+
+    % BACKTRACKING.
+
+    alpha = 1; % Reset the value of alpha (parameter used for linesearch).
+    xnew = xk + alpha * pk;   % Computing the candidate solution at step k.
+    fnew = f(xnew);
+    c1_gradfk_pk = c1 * gradfk' * pk;
+
+    bt = 0;
+    while bt < btmax && fnew > farmijo(fk, alpha, c1_gradfk_pk)
+        alpha = rho * alpha; % Step reduction
+        xnew = xk + alpha * pk;
+        fnew = f(xnew);
+        bt = bt + 1;
+    end
+
+    if bt == btmax && fnew > farmijo(fk, alpha, c1_gradfk_pk)
+        disp('Backtracking (Truncated Newton): maximum number of iterations reached.');
+        k = k+1;
+        xseq(:, k+1) = xk;
+        btseq(k) = bt;
+        pks(:, k) = pk;
+        alphas(k) = alpha;
+        inner_iters(k) = j_cg;
+
+        break;            
+    end
+            
+    xk = xnew;
+    fk = fnew;
+    gradfk = gradf(xk);
+    gradfk_norm = norm(gradfk);
+    k = k + 1;
+    
+    xseq(:, k+1)   = xk;
+    btseq(k)       = bt;
+    pks(:, k)      = pk;
+    alphas(k)      = alpha;
+    inner_iters(k) = j_cg;
+        
+
+end %while loop on k
+
+% Trimming the final structures.
+xseq   = xseq(:, 1:k+1);
+btseq  = btseq(1:k);
+pks    = pks(:, 1:k);
+inner_iters = inner_iters(:,1:k);
+end %function end
