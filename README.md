@@ -94,5 +94,4 @@ report (`report/`).
 
 ## License
 
-Specify a license (e.g., MIT) or state that this is coursework not intended
-for reuse without permission.
+ GNU GENERAL PUBLIC LICENSE Version 3, 29 June 2007
